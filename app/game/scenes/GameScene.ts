@@ -1,7 +1,20 @@
+import React from 'react';
 import { UNIT_TYPES, UnitType } from '../units/UnitTypes';
 import { Enemy, createEnemy, createBoss, updateEnemy, destroyEnemy, calcDamage } from '../enemies/Enemy';
+import { COMBINATIONS } from '../combinations/Combinations';
 
-export function createGameScene(Phaser: any, onUnitSelect: (unit: any) => void) {
+const MAP_W = 2400;
+const MAP_H = 1600;
+
+export function createGameScene(
+  Phaser: any,
+  onUnitSelect: (unit: any) => void,
+  mouseRef: React.MutableRefObject<{ x: number; y: number; inGame: boolean }>,
+  onCamUpdate: (info: any) => void,
+  moveCamRef: React.MutableRefObject<((x: number, y: number) => void) | null>,
+  combineRef: React.MutableRefObject<((materials: string[]) => void) | null>,
+  onUnitsUpdate: (units: any[]) => void,
+) {
   return class GameScene extends Phaser.Scene {
     private path!: any;
     private enemies: Enemy[] = [];
@@ -20,6 +33,7 @@ export function createGameScene(Phaser: any, onUnitSelect: (unit: any) => void) 
     private roundTimerText!: any;
     private rollCountText!: any;
     private rollBtn!: any;
+    private rollBtnText!: any;
     private isCountingDown: boolean = false;
     private countdown: number = 10;
     private countdownTimer: any = null;
@@ -31,6 +45,9 @@ export function createGameScene(Phaser: any, onUnitSelect: (unit: any) => void) 
     private roundEnded: boolean = false;
     private spawnTimer: any = null;
     private roundTimerEvent: any = null;
+    private cam!: any;
+    private camSpeed: number = 8;
+    private edgeSize: number = 40;
 
     constructor() {
       super({ key: 'GameScene' });
@@ -38,36 +55,87 @@ export function createGameScene(Phaser: any, onUnitSelect: (unit: any) => void) 
 
     create() {
       this.graphics = this.add.graphics();
+      this.cam = this.cameras.main;
+      this.cam.setBounds(0, 0, MAP_W, MAP_H);
+      this.cam.setScroll(MAP_W / 2 - this.scale.width / 2, MAP_H / 2 - this.scale.height / 2);
 
-      this.path = new Phaser.Curves.Path(250, 120);
-      this.path.lineTo(250, 670);
-      this.path.lineTo(950, 670);
-      this.path.lineTo(950, 120);
-      this.path.lineTo(250, 120);
+      this.path = new Phaser.Curves.Path(800, 400);
+      this.path.lineTo(800, 1200);
+      this.path.lineTo(1600, 1200);
+      this.path.lineTo(1600, 400);
+      this.path.lineTo(800, 400);
 
-      this.prepareText = this.add.text(600, 40, '⏳ 준비 시간: 10초', {
+      // 미니맵 카메라 이동 콜백
+      moveCamRef.current = (worldX: number, worldY: number) => {
+        this.cam.setScroll(
+          worldX - this.scale.width / 2,
+          worldY - this.scale.height / 2
+        );
+      };
+
+      // 조합 실행 콜백
+      combineRef.current = (materials: string[]) => {
+        const needed = [...materials];
+        const toRemove: any[] = [];
+
+        for (const unit of this.myUnits) {
+          const idx = needed.indexOf(unit.type.name);
+          if (idx !== -1) {
+            needed.splice(idx, 1);
+            toRemove.push(unit);
+          }
+        }
+
+        if (needed.length > 0) return;
+
+        const firstUnit = toRemove[0];
+        const spawnX = firstUnit.x;
+        const spawnY = firstUnit.y;
+
+        toRemove.forEach(unit => {
+          unit.obj.destroy();
+          unit.label.destroy();
+          unit.rangeCircle.destroy();
+          unit.skillBar.destroy();
+          unit.skillBg.destroy();
+          this.myUnits.splice(this.myUnits.indexOf(unit), 1);
+        });
+
+        const combo = COMBINATIONS.find(c =>
+          JSON.stringify([...c.materials].sort()) === JSON.stringify([...materials].sort())
+        );
+        if (!combo) return;
+
+        const resultUnitType = UNIT_TYPES.find(t => t.name === combo.result);
+        if (!resultUnitType) return;
+
+        this.placeUnitAt(resultUnitType, spawnX, spawnY);
+      };
+
+      // UI
+      this.prepareText = this.add.text(this.scale.width / 2, 30, '⏳ 준비 시간: 10초', {
         fontSize: '22px', color: '#FFD700', fontStyle: 'bold'
-      }).setOrigin(0.5).setDepth(10);
+      }).setOrigin(0.5).setDepth(10).setScrollFactor(0);
 
       this.unitCountText = this.add.text(10, 10, '👾 적: 0/100', {
         fontSize: '18px', color: '#FF6B6B'
-      }).setDepth(10);
+      }).setDepth(10).setScrollFactor(0);
 
       this.roundText = this.add.text(10, 35, '🌊 라운드: 1', {
         fontSize: '18px', color: '#74B9FF'
-      }).setDepth(10);
+      }).setDepth(10).setScrollFactor(0);
 
       this.roundTimerText = this.add.text(10, 60, '⏱️ 60초', {
         fontSize: '18px', color: '#FFD700'
-      }).setDepth(10);
+      }).setDepth(10).setScrollFactor(0);
 
       this.rollCountText = this.add.text(10, 85, '🎲 뽑기: 5회', {
         fontSize: '18px', color: '#00ff88'
-      }).setDepth(10);
+      }).setDepth(10).setScrollFactor(0);
 
-      this.countdownText = this.add.text(600, 300, '', {
+      this.countdownText = this.add.text(this.scale.width / 2, this.scale.height / 2, '', {
         fontSize: '80px', color: '#FF0000', fontStyle: 'bold'
-      }).setOrigin(0.5).setDepth(20);
+      }).setOrigin(0.5).setDepth(20).setScrollFactor(0);
 
       this.createRollPanel();
 
@@ -81,7 +149,9 @@ export function createGameScene(Phaser: any, onUnitSelect: (unit: any) => void) 
           onUnitSelect(null);
         }
         if (pointer.rightButtonDown() && this.selectedUnits.length > 0) {
-          this.moveUnitsTo(pointer.x, pointer.y);
+          const worldX = pointer.x + this.cam.scrollX;
+          const worldY = pointer.y + this.cam.scrollY;
+          this.moveUnitsTo(worldX, worldY);
         }
       });
 
@@ -129,11 +199,11 @@ export function createGameScene(Phaser: any, onUnitSelect: (unit: any) => void) 
     }
 
     createRollPanel() {
-      this.rollBtn = this.add.rectangle(600, 580, 180, 45, 0x4f46e5)
-        .setInteractive().setDepth(10);
-      this.add.text(600, 580, '🎲 유닛 소환', {
+      this.rollBtn = this.add.rectangle(90, this.scale.height - 25, 160, 44, 0x4f46e5)
+        .setInteractive().setDepth(10).setScrollFactor(0);
+      this.rollBtnText = this.add.text(90, this.scale.height - 25, '🎲 유닛 소환', {
         fontSize: '16px', color: '#ffffff'
-      }).setOrigin(0.5).setDepth(11);
+      }).setOrigin(0.5).setDepth(11).setScrollFactor(0);
 
       this.rollBtn.on('pointerdown', () => {
         if (this.rollCount <= 0) return;
@@ -150,9 +220,10 @@ export function createGameScene(Phaser: any, onUnitSelect: (unit: any) => void) 
     }
 
     placeUnit(type: UnitType) {
-      const x = 600;
-      const y = 300;
+      this.placeUnitAt(type, MAP_W / 2, MAP_H / 2);
+    }
 
+    placeUnitAt(type: UnitType, x: number, y: number) {
       const circle = this.add.circle(x, y, 14, type.color).setInteractive().setDepth(5);
       const label = this.add.text(x, y - 22, type.emoji, { fontSize: '14px' }).setOrigin(0.5).setDepth(6);
       const rangeCircle = this.add.circle(x, y, type.range, type.color, 0.1).setDepth(3);
@@ -161,25 +232,30 @@ export function createGameScene(Phaser: any, onUnitSelect: (unit: any) => void) 
 
       const unit = {
         x, y, type,
-        hp: type.hp,
-        maxHp: type.hp,
+        hp: type.hp, maxHp: type.hp,
         skillGauge: 0,
         obj: circle, label, rangeCircle, skillBar, skillBg,
         lastFired: 0,
       };
 
       this.myUnits.push(unit);
+      onUnitsUpdate(this.myUnits.map(u => ({ type: u.type })));
     }
 
     selectUnitsInRect(x1: number, y1: number, x2: number, y2: number) {
-      const minX = Math.min(x1, x2);
-      const maxX = Math.max(x1, x2);
-      const minY = Math.min(y1, y2);
-      const maxY = Math.max(y1, y2);
+      const wx1 = x1 + this.cam.scrollX;
+      const wy1 = y1 + this.cam.scrollY;
+      const wx2 = x2 + this.cam.scrollX;
+      const wy2 = y2 + this.cam.scrollY;
+
+      const minX = Math.min(wx1, wx2);
+      const maxX = Math.max(wx1, wx2);
+      const minY = Math.min(wy1, wy2);
+      const maxY = Math.max(wy1, wy2);
 
       if (maxX - minX < 5 && maxY - minY < 5) {
         const clicked = this.myUnits.find(u =>
-          Phaser.Math.Distance.Between(u.obj.x, u.obj.y, x1, y1) < 20
+          Phaser.Math.Distance.Between(u.obj.x, u.obj.y, wx1, wy1) < 20
         );
         if (clicked) {
           this.selectedUnits = [clicked];
@@ -322,10 +398,6 @@ export function createGameScene(Phaser: any, onUnitSelect: (unit: any) => void) 
       this.spawnTimer = null;
       this.roundTimerEvent = null;
 
-      for (let i = this.enemies.length - 1; i >= 0; i--) {
-        destroyEnemy(this.enemies[i]);
-      }
-      this.enemies = [];
       this.rollCount += 2;
       this.round++;
 
@@ -359,10 +431,11 @@ export function createGameScene(Phaser: any, onUnitSelect: (unit: any) => void) 
       this.spawnTimer?.remove();
       this.roundTimerEvent?.remove();
       this.scene.pause();
-      this.add.rectangle(600, 300, 500, 150, 0x000000, 0.8).setDepth(30);
-      this.add.text(600, 300, win ? '🎉 승리!' : '💀 GAME OVER', {
+      this.add.rectangle(this.scale.width / 2, this.scale.height / 2, 500, 150, 0x000000, 0.8)
+        .setDepth(30).setScrollFactor(0);
+      this.add.text(this.scale.width / 2, this.scale.height / 2, win ? '🎉 승리!' : '💀 GAME OVER', {
         fontSize: '64px', color: win ? '#FFD700' : '#FF0000', fontStyle: 'bold'
-      }).setOrigin(0.5).setDepth(31);
+      }).setOrigin(0.5).setDepth(31).setScrollFactor(0);
     }
 
     useSkill(unit: any) {
@@ -390,6 +463,27 @@ export function createGameScene(Phaser: any, onUnitSelect: (unit: any) => void) 
     update(time: number) {
       if (this.gameOver) return;
 
+      const mouse = mouseRef.current;
+      const w = this.scale.width;
+      const h = this.scale.height;
+
+      if (mouse.inGame) {
+        if (mouse.x < this.edgeSize) this.cam.scrollX -= this.camSpeed;
+        if (mouse.x > w - this.edgeSize) this.cam.scrollX += this.camSpeed;
+        if (mouse.y < this.edgeSize) this.cam.scrollY -= this.camSpeed;
+        if (mouse.y > h - this.edgeSize) this.cam.scrollY += this.camSpeed;
+      }
+
+      if (Math.floor(time / 16) % 4 === 0) {
+        onCamUpdate({
+          x: this.cam.scrollX,
+          y: this.cam.scrollY,
+          w: this.scale.width,
+          h: this.scale.height,
+        });
+        onUnitsUpdate(this.myUnits.map(u => ({ type: u.type })));
+      }
+
       this.graphics.clear();
       this.graphics.lineStyle(30, 0x8B7355);
       this.path.draw(this.graphics);
@@ -398,7 +492,8 @@ export function createGameScene(Phaser: any, onUnitSelect: (unit: any) => void) 
         const pointer = this.input.activePointer;
         this.graphics.lineStyle(1, 0xffffff, 0.8);
         this.graphics.strokeRect(
-          this.dragStartX, this.dragStartY,
+          this.dragStartX + this.cam.scrollX,
+          this.dragStartY + this.cam.scrollY,
           pointer.x - this.dragStartX,
           pointer.y - this.dragStartY
         );
@@ -408,7 +503,6 @@ export function createGameScene(Phaser: any, onUnitSelect: (unit: any) => void) 
         updateEnemy(enemy, this.path);
       }
 
-      // 죽은 적 Set으로 관리
       const toRemove = new Set<number>();
 
       for (const unit of this.myUnits) {
@@ -442,10 +536,12 @@ export function createGameScene(Phaser: any, onUnitSelect: (unit: any) => void) 
         }
       }
 
-      // 뒤에서부터 제거
       Array.from(toRemove).sort((a, b) => b - a).forEach(idx => {
-        destroyEnemy(this.enemies[idx]);
-        this.enemies.splice(idx, 1);
+        const enemy = this.enemies[idx];
+        if (enemy && enemy.obj) {
+          destroyEnemy(enemy);
+          this.enemies.splice(idx, 1);
+        }
       });
 
       if (this.phase === 'battle') {
