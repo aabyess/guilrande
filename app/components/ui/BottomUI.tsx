@@ -134,27 +134,28 @@ function MiniMap({
         ctx.stroke();
       }
 
-      // ── 카메라 시야 사각형 (순수 2D: target 중심, 높이로 크기 추산) ──
+      // ── 카메라 시야 사각형 ──
       const cam = cameraRef.current as THREE.PerspectiveCamera | null;
-      const controls = orbitRef.current;
-      if (cam && controls) {
-        const target = controls.target as THREE.Vector3;
-        const camH = cam.position.y; // 높이가 높을수록 시야 넓음
-        // FOV + aspect 로 지면 가시 반경 추산
-        const fovRad = (cam.fov ?? 45) * (Math.PI / 180);
+      if (cam) {
+        const controls = orbitRef.current;
+        // target: OrbitControls가 있으면 target, 없으면 카메라 정면 교점
+        const tx = controls?.target?.x ?? cam.position.x;
+        const tz = controls?.target?.z ?? cam.position.z;
+        const camH = Math.max(cam.position.y, 1);
+        const fovRad = ((cam.fov ?? 45) * Math.PI) / 180;
         const aspect = cam.aspect ?? (window.innerWidth / window.innerHeight);
         const halfH = Math.tan(fovRad / 2) * camH;
         const halfW = halfH * aspect;
 
-        const tl = toMini(target.x - halfW, target.z - halfH);
-        const br = toMini(target.x + halfW, target.z + halfH);
-        const rw = br.x - tl.x;
-        const rh = br.y - tl.y;
+        const tl = toMini(tx - halfW, tz - halfH);
+        const br = toMini(tx + halfW, tz + halfH);
+        const rw = Math.max(br.x - tl.x, 2);
+        const rh = Math.max(br.y - tl.y, 2);
 
-        ctx.strokeStyle = '#ffffff';
+        ctx.strokeStyle = '#00ffcc';
         ctx.lineWidth = 1.5;
         ctx.strokeRect(tl.x, tl.y, rw, rh);
-        ctx.fillStyle = 'rgba(255,255,255,0.05)';
+        ctx.fillStyle = 'rgba(0,255,200,0.06)';
         ctx.fillRect(tl.x, tl.y, rw, rh);
       }
 

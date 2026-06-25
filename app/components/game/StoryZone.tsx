@@ -7,109 +7,192 @@ import type { RootState } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useGameStore, StoryBuilding } from '../../store/useGameStore';
 
-// 포탈 위치 — 2사분면 하단 (3사분면 경계 근처)
-const PORTAL_POS: [number, number, number] = [-30, 0, -10];
-// 신전 월드 위치 (useGameStore와 동일)
-const TEMPLE_ARRIVE: { x: number; z: number } = { x: -30, z: 34 };
-// 포탈 감지 반경
 const PORTAL_RADIUS = 4;
 
-// ── 포탈 ────────────────────────────────────────────────────
-export function StoryPortal() {
-  const portalRef  = useRef<THREE.Mesh>(null);
-  const ringRef    = useRef<THREE.Mesh>(null);
-  const { units, moveUnit } = useGameStore();
+// ── 각 플레이어 섬 포탈 위치 (우상단 코너) ──────────────────
+const ENTRY_PORTALS: { pos: [number,number,number]; playerId: number }[] = [
+  { pos: [-8, 0, -52], playerId: 1 },
+  { pos: [52, 0, -52], playerId: 2 },
+  { pos: [-8, 0,   8], playerId: 3 },
+  { pos: [52, 0,   8], playerId: 4 },
+];
+
+// ── 스토리존 → 플레이어 맵 귀환 포탈 위치 ──────────────────
+const RETURN_PORTALS: { pos: [number,number,number]; arrive: [number,number] }[] = [
+  { pos: [-18, 0, 88], arrive: [-30, -30] },  // → P1 중앙
+  { pos: [ -6, 0, 88], arrive: [ 30, -30] },  // → P2 중앙
+  { pos: [  6, 0, 88], arrive: [-30,  30] },  // → P3 중앙
+  { pos: [ 18, 0, 88], arrive: [ 30,  30] },  // → P4 중앙
+];
+
+// 스토리존 도착 위치
+const STORY_ARRIVE = { x: 0, z: 94 };
+
+// ── 단계별 건물 스타일 ───────────────────────────────────────
+interface StageStyle {
+  name: string;
+  wallColor: string;
+  roofColor: string;
+  emissive: string;
+  label: string;
+}
+
+const STAGE_STYLES: Record<number, StageStyle> = {
+  1:  { name: '한양영어유치원',   wallColor: '#ffcc88', roofColor: '#ff9944', emissive: '#ffaa00', label: '🐣' },
+  2:  { name: '구일초등학교',     wallColor: '#88cc88', roofColor: '#44aa44', emissive: '#00cc44', label: '🎒' },
+  3:  { name: '구일중학교',       wallColor: '#8888cc', roofColor: '#4444aa', emissive: '#4444ff', label: '📚' },
+  4:  { name: '구일고등학교',     wallColor: '#cc8888', roofColor: '#aa4444', emissive: '#ff4444', label: '📖' },
+  5:  { name: '메가스터디',       wallColor: '#cc44cc', roofColor: '#882288', emissive: '#ff00ff', label: '💀' },
+  6:  { name: '7탄약창',          wallColor: '#556655', roofColor: '#334433', emissive: '#88ff44', label: '💣' },
+  7:  { name: '동양미래대학교',   wallColor: '#336699', roofColor: '#223355', emissive: '#3388ff', label: '🎓' },
+  8:  { name: '동양미래대학교+',  wallColor: '#224477', roofColor: '#112233', emissive: '#2266dd', label: '🎓' },
+  9:  { name: '동양미래대학교++', wallColor: '#112255', roofColor: '#081122', emissive: '#1144bb', label: '🎓' },
+  10: { name: '취업 성공',        wallColor: '#ccaa00', roofColor: '#aa8800', emissive: '#ffdd00', label: '💰' },
+};
+
+// ── 입장 포탈 (플레이어 섬 → 스토리존) ─────────────────────
+function EntryPortal({ pos, playerId }: { pos: [number,number,number]; playerId: number }) {
+  const portalRef = useRef<THREE.Mesh>(null);
+  const ringRef   = useRef<THREE.Mesh>(null);
+  const { units, storyZone } = useGameStore();
   const teleportedRef = useRef<Set<string>>(new Set());
 
-  // 매 프레임: 포탈 회전 + 유닛 순간이동 감지
   useFrame((_state: RootState, delta: number): void => {
     if (portalRef.current) portalRef.current.rotation.y += delta * 1.2;
     if (ringRef.current)   ringRef.current.rotation.z  += delta * 2.0;
 
-    // 포탈 반경 내 유닛 감지 → 스토리존으로 순간이동
     units.forEach(unit => {
-      const dx   = unit.x - PORTAL_POS[0];
-      const dz   = unit.z - PORTAL_POS[2];
-      const dist = Math.sqrt(dx * dx + dz * dz);
-
-      if (dist < PORTAL_RADIUS) {
+      const dx = unit.x - pos[0], dz = unit.z - pos[2];
+      if (Math.sqrt(dx*dx + dz*dz) < PORTAL_RADIUS) {
         if (!teleportedRef.current.has(unit.id)) {
           teleportedRef.current.add(unit.id);
-          moveUnit(unit.id, TEMPLE_ARRIVE.x, TEMPLE_ARRIVE.z);
+          useGameStore.setState(s => ({
+            units: s.units.map(u => u.id === unit.id
+              ? { ...u, x: STORY_ARRIVE.x, z: STORY_ARRIVE.z, targetX: undefined, targetZ: undefined }
+              : u
+            )
+          }));
         }
       } else {
-        // 포탈에서 멀어지면 재사용 가능하게 리셋
         teleportedRef.current.delete(unit.id);
       }
     });
   });
 
+  const cleared = storyZone.clearedStages.length;
+  const portalColor = '#8800ff';
+
   return (
-    <group position={PORTAL_POS}>
-      {/* 바닥 링 */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.05, 0]}>
+    <group position={pos}>
+      <mesh rotation={[-Math.PI/2,0,0]} position={[0,0.05,0]}>
         <ringGeometry args={[1.8, 2.6, 32]} />
-        <meshBasicMaterial color="#8800ff" transparent opacity={0.6} side={THREE.DoubleSide} />
+        <meshBasicMaterial color={portalColor} transparent opacity={0.6} side={THREE.DoubleSide} />
       </mesh>
-      {/* 내부 원 */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.06, 0]}>
-        <circleGeometry args={[1.8, 32]} />
-        <meshBasicMaterial color="#aa44ff" transparent opacity={0.4} />
+      <mesh rotation={[-Math.PI/2,0,0]} position={[0,0.06,0]}>
+        <circleGeometry args={[1.8,32]} />
+        <meshBasicMaterial color="#aa44ff" transparent opacity={0.35} />
       </mesh>
-      {/* 메인 링 (회전) */}
-      <mesh ref={portalRef} position={[0, 1.5, 0]}>
-        <torusGeometry args={[1.0, 0.15, 8, 32]} />
+      <mesh ref={portalRef} position={[0,1.5,0]}>
+        <torusGeometry args={[1.0,0.15,8,32]} />
         <meshStandardMaterial color="#cc66ff" emissive="#8800ff" emissiveIntensity={1.5} />
       </mesh>
-      {/* 보조 링 */}
-      <mesh ref={ringRef} position={[0, 1.5, 0]} rotation={[Math.PI / 3, 0, 0]}>
-        <torusGeometry args={[1.2, 0.08, 6, 32]} />
+      <mesh ref={ringRef} position={[0,1.5,0]} rotation={[Math.PI/3,0,0]}>
+        <torusGeometry args={[1.2,0.08,6,32]} />
         <meshStandardMaterial color="#ff88ff" emissive="#cc00ff" emissiveIntensity={1.2} />
       </mesh>
-      {/* 감지 반경 표시 (바닥) */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.03, 0]}>
-        <ringGeometry args={[PORTAL_RADIUS - 0.2, PORTAL_RADIUS, 48]} />
-        <meshBasicMaterial color="#aa44ff" transparent opacity={0.15} />
+      <mesh rotation={[-Math.PI/2,0,0]} position={[0,0.03,0]}>
+        <ringGeometry args={[PORTAL_RADIUS-0.2, PORTAL_RADIUS, 48]} />
+        <meshBasicMaterial color="#aa44ff" transparent opacity={0.1} />
       </mesh>
-
-      <pointLight position={[0, 1.5, 0]} color="#aa44ff" intensity={6} distance={10} decay={2} />
-
-      <Html position={[0, 3.4, 0]} center distanceFactor={12}>
+      <pointLight position={[0,1.5,0]} color="#aa44ff" intensity={6} distance={10} decay={2} />
+      <Html position={[0,3.2,0]} center distanceFactor={12}>
         <div style={{
-          backgroundColor: 'rgba(80,0,140,0.88)',
-          border: '1px solid #cc66ff',
-          color: '#fff',
-          fontSize: '12px',
-          fontWeight: 'bold',
-          padding: '4px 10px',
-          borderRadius: '8px',
-          whiteSpace: 'nowrap',
-          userSelect: 'none',
-          pointerEvents: 'none',
+          backgroundColor: 'rgba(60,0,110,0.9)',
+          border: '1px solid #aa55ff',
+          color: '#ddb8ff', fontSize: '11px', fontWeight: 'bold',
+          padding: '3px 8px', borderRadius: '6px',
+          whiteSpace: 'nowrap', pointerEvents: 'none',
         }}>
-          ⚔ 스토리존 — 가까이 가면 이동
+          ⚔ P{playerId} 스토리존 {cleared > 0 ? `(${cleared}클리어)` : ''}
         </div>
       </Html>
     </group>
   );
 }
 
-// ── 고대 신전 ────────────────────────────────────────────────
+// ── 귀환 포탈 (스토리존 → 플레이어 맵) ─────────────────────
+function ReturnPortal({ pos, arrive, label }: {
+  pos: [number,number,number];
+  arrive: [number,number];
+  label: string;
+}) {
+  const portalRef = useRef<THREE.Mesh>(null);
+  const { units } = useGameStore();
+  const teleportedRef = useRef<Set<string>>(new Set());
+
+  useFrame((_state: RootState, delta: number): void => {
+    if (portalRef.current) portalRef.current.rotation.y += delta * 0.8;
+
+    units.forEach(unit => {
+      const dx = unit.x - pos[0], dz = unit.z - pos[2];
+      if (Math.sqrt(dx*dx + dz*dz) < PORTAL_RADIUS - 1) {
+        if (!teleportedRef.current.has(unit.id)) {
+          teleportedRef.current.add(unit.id);
+          useGameStore.setState(s => ({
+            units: s.units.map(u => u.id === unit.id
+              ? { ...u, x: arrive[0], z: arrive[1], targetX: undefined, targetZ: undefined }
+              : u
+            )
+          }));
+        }
+      } else {
+        teleportedRef.current.delete(unit.id);
+      }
+    });
+  });
+
+  return (
+    <group position={pos}>
+      <mesh rotation={[-Math.PI/2,0,0]} position={[0,0.05,0]}>
+        <ringGeometry args={[1.2, 1.8, 32]} />
+        <meshBasicMaterial color="#00ccff" transparent opacity={0.5} side={THREE.DoubleSide} />
+      </mesh>
+      <mesh ref={portalRef} position={[0,1.0,0]}>
+        <torusGeometry args={[0.7,0.1,8,32]} />
+        <meshStandardMaterial color="#44ddff" emissive="#0088cc" emissiveIntensity={1.2} />
+      </mesh>
+      <pointLight position={[0,1.0,0]} color="#00aaff" intensity={4} distance={8} decay={2} />
+      <Html position={[0,2.4,0]} center distanceFactor={12}>
+        <div style={{
+          backgroundColor: 'rgba(0,60,110,0.9)',
+          border: '1px solid #44aaff',
+          color: '#aaddff', fontSize: '10px', fontWeight: 'bold',
+          padding: '2px 6px', borderRadius: '5px',
+          whiteSpace: 'nowrap', pointerEvents: 'none',
+        }}>
+          🔙 {label}로 귀환
+        </div>
+      </Html>
+    </group>
+  );
+}
+
+// ── 스토리 건물 ──────────────────────────────────────────────
 const ATTACK_COOLDOWN = 1000;
 
-function Temple({ building }: { building: StoryBuilding }) {
-  const { damageBuilding, spawnBoss, storyZone, setBossSpawned, units } = useGameStore();
-  const lastAttackRef = useRef<Record<string, number>>({});
-  const glowRef       = useRef<THREE.PointLight>(null);
+function StoryBuilding_({ building }: { building: StoryBuilding }) {
+  const { damageBuilding, units, advanceStoryStage, storyZone } = useGameStore();
+  const lastAttackRef = useRef<Record<string,number>>({});
+  const glowRef = useRef<THREE.PointLight>(null);
+  const stage = storyZone.currentStage;
+  const style = STAGE_STYLES[stage] ?? STAGE_STYLES[1];
 
   useFrame((_state: RootState): void => {
     if (building.defeated) return;
     const now = Date.now();
     units.forEach(unit => {
-      const dx   = unit.x - building.x;
-      const dz   = unit.z - building.z;
-      const dist = Math.sqrt(dx * dx + dz * dz);
-      if (dist > building.radius) return;
+      const dx = unit.x - building.x, dz = unit.z - building.z;
+      if (Math.sqrt(dx*dx + dz*dz) > building.radius) return;
       const last = lastAttackRef.current[unit.id] ?? 0;
       if (now - last < ATTACK_COOLDOWN) return;
       lastAttackRef.current[unit.id] = now;
@@ -117,89 +200,103 @@ function Temple({ building }: { building: StoryBuilding }) {
     });
   });
 
+  // 건물 파괴 시 즉시 다음 단계
   useEffect(() => {
-    if (building.defeated && !storyZone.bossSpawned) {
-      setBossSpawned(true);
-      spawnBoss(1);
+    if (building.defeated) {
+      const { storyZone, advanceStoryStage } = useGameStore.getState();
+      if (storyZone.currentStage < 10) {
+        setTimeout(() => advanceStoryStage(), 1500); // 1.5초 후 다음 단계
+      }
     }
-  }, [building.defeated, storyZone.bossSpawned, setBossSpawned, spawnBoss]);
+  }, [building.defeated]);
 
   useFrame((_state: RootState): void => {
     if (!glowRef.current) return;
     const ratio = building.hp / building.maxHp;
-    glowRef.current.intensity = building.defeated ? 0 : 2 + (1 - ratio) * 6;
-    glowRef.current.color.setStyle(ratio > 0.5 ? '#ff8800' : '#ff2200');
+    glowRef.current.intensity = building.defeated ? 0 : 2 + (1-ratio) * 8;
+    glowRef.current.color.setStyle(building.defeated ? '#000' : style.emissive);
   });
 
   const hpRatio = building.hp / building.maxHp;
-  const pillars: [number, number, number][] = [[-3,0,-3],[3,0,-3],[-3,0,3],[3,0,3]];
+  const pillars: [number,number,number][] = [[-3,0,-3],[3,0,-3],[-3,0,3],[3,0,3]];
 
   return (
     <group position={[building.x, 0, building.z]}>
-      <mesh position={[0, 0.3, 0]} receiveShadow castShadow>
-        <boxGeometry args={[10, 0.6, 10]} />
+      {/* 기단 */}
+      <mesh position={[0,0.3,0]} receiveShadow castShadow>
+        <boxGeometry args={[10,0.6,10]} />
         <meshStandardMaterial color="#6a5a3a" roughness={0.9} />
       </mesh>
-      <mesh position={[0, 0.7, 0]} receiveShadow castShadow>
-        <boxGeometry args={[8, 0.8, 8]} />
+      <mesh position={[0,0.7,0]} receiveShadow castShadow>
+        <boxGeometry args={[8,0.8,8]} />
         <meshStandardMaterial color="#7a6a4a" roughness={0.85} />
       </mesh>
-      {pillars.map((p, i) => (
-        <mesh key={i} position={[p[0], 2.5, p[2]]} castShadow>
-          <cylinderGeometry args={[0.4, 0.5, 4, 8]} />
-          <meshStandardMaterial color={building.defeated ? '#3a2a1a' : '#c8a060'} roughness={0.7} />
+      {/* 기둥 */}
+      {pillars.map((p,i) => (
+        <mesh key={i} position={[p[0],2.5,p[2]]} castShadow>
+          <cylinderGeometry args={[0.4,0.5,4,8]} />
+          <meshStandardMaterial color={building.defeated ? '#3a2a1a' : style.wallColor} roughness={0.7} />
         </mesh>
       ))}
+      {/* 지붕 */}
       {!building.defeated && (
-        <mesh position={[0, 5.5, 0]} castShadow>
-          <coneGeometry args={[5.5, 2.5, 4]} />
-          <meshStandardMaterial color="#8a6a30" roughness={0.8} />
+        <mesh position={[0,5.5,0]} castShadow>
+          <coneGeometry args={[5.5,2.5,stage <= 3 ? 4 : stage <= 6 ? 6 : 8]} />
+          <meshStandardMaterial color={style.roofColor} roughness={0.8} />
         </mesh>
       )}
+      {/* 파괴 잔해 */}
       {building.defeated && (
-        ([ [-2,0.3,1],[1,0.2,-2],[2,0.4,2],[-1,0.3,-1] ] as [number,number,number][]).map((p, i) => (
+        ([ [-2,0.3,1],[1,0.2,-2],[2,0.4,2],[-1,0.3,-1] ] as [number,number,number][]).map((p,i) => (
           <mesh key={i} position={p} castShadow>
-            <boxGeometry args={[1.5 + i * 0.3, 0.5, 1.2 + i * 0.2]} />
+            <boxGeometry args={[1.5+i*0.3,0.5,1.2+i*0.2]} />
             <meshStandardMaterial color="#4a3a2a" roughness={1} />
           </mesh>
         ))
       )}
-      <mesh position={[0, 1.8, 0]} castShadow>
-        <boxGeometry args={[2, 1.2, 2]} />
+      {/* 제단 */}
+      <mesh position={[0,1.8,0]} castShadow>
+        <boxGeometry args={[2,1.2,2]} />
         <meshStandardMaterial
-          color={building.defeated ? '#2a1a0a' : '#aa8840'}
-          emissive={building.defeated ? '#000' : '#553300'}
-          emissiveIntensity={building.defeated ? 0 : 0.5}
+          color={building.defeated ? '#2a1a0a' : style.wallColor}
+          emissive={building.defeated ? '#000' : style.emissive}
+          emissiveIntensity={building.defeated ? 0 : 0.4}
           roughness={0.6}
         />
       </mesh>
-      <pointLight ref={glowRef} position={[0, 3, 0]} color="#ff8800" intensity={2} distance={15} decay={2} />
+      <pointLight ref={glowRef} position={[0,4,0]} color={style.emissive} intensity={3} distance={18} decay={2} />
 
+      {/* 단계 표시 */}
       {!building.defeated && (
-        <Html position={[0, 8, 0]} center distanceFactor={18}>
-          <div style={{ width: '110px', pointerEvents: 'none' }}>
-            <div style={{ color: '#ffcc44', fontSize: '12px', fontWeight: 'bold', textAlign: 'center', marginBottom: '3px', textShadow: '0 0 6px #ff8800' }}>
-              🏛 고대 신전
+        <Html position={[0,9,0]} center distanceFactor={18}>
+          <div style={{ width:'130px', pointerEvents:'none' }}>
+            <div style={{ color:'#ffcc44', fontSize:'13px', fontWeight:'bold', textAlign:'center', marginBottom:'4px', textShadow:`0 0 8px ${style.emissive}` }}>
+              {style.label} {style.name}
             </div>
-            <div style={{ width: '100%', height: '10px', backgroundColor: '#111', border: '1px solid #664400', borderRadius: '2px', overflow: 'hidden' }}>
-              <div style={{ width: `${hpRatio * 100}%`, height: '100%', backgroundColor: hpRatio > 0.5 ? '#ff8800' : '#ff2200', transition: 'width 0.1s' }} />
+            <div style={{ color:'#aaa', fontSize:'10px', textAlign:'center', marginBottom:'3px' }}>
+              단계 {stage} / 10
             </div>
-            <div style={{ color: '#aaa', fontSize: '10px', textAlign: 'center', marginTop: '2px' }}>
-              {building.hp} / {building.maxHp}
+            <div style={{ width:'100%', height:'10px', backgroundColor:'#111', border:`1px solid ${style.emissive}55`, borderRadius:'2px', overflow:'hidden' }}>
+              <div style={{ width:`${hpRatio*100}%`, height:'100%', backgroundColor: hpRatio > 0.5 ? style.emissive : '#ff2200', transition:'width 0.1s' }} />
+            </div>
+            <div style={{ color:'#888', fontSize:'9px', textAlign:'center', marginTop:'2px' }}>
+              {building.hp.toLocaleString()} / {building.maxHp.toLocaleString()}
             </div>
           </div>
         </Html>
       )}
       {building.defeated && (
-        <Html position={[0, 5, 0]} center distanceFactor={18}>
-          <div style={{ color: '#ff4444', fontSize: '14px', fontWeight: 'bold', textShadow: '0 0 8px #ff0000' }}>
-            💀 신전 파괴됨
+        <Html position={[0,6,0]} center distanceFactor={18}>
+          <div style={{ color:'#ffaa00', fontSize:'16px', fontWeight:'bold', textShadow:'0 0 10px #ff8800', textAlign:'center' }}>
+            ✅ 클리어!<br/>
+            <span style={{ fontSize:'11px', color:'#ffdd88' }}>다음 단계 준비 중...</span>
           </div>
         </Html>
       )}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.08, 0]}>
-        <ringGeometry args={[building.radius - 0.1, building.radius, 64]} />
-        <meshBasicMaterial color={building.defeated ? '#330000' : '#ff6600'} transparent opacity={0.2} />
+      {/* 사거리 표시 */}
+      <mesh rotation={[-Math.PI/2,0,0]} position={[0,0.08,0]}>
+        <ringGeometry args={[building.radius-0.1, building.radius, 64]} />
+        <meshBasicMaterial color={style.emissive} transparent opacity={0.15} />
       </mesh>
     </group>
   );
@@ -208,11 +305,22 @@ function Temple({ building }: { building: StoryBuilding }) {
 // ── 루트 ─────────────────────────────────────────────────────
 export function StoryZoneObjects() {
   const { storyZone } = useGameStore();
+
   return (
     <>
-      <StoryPortal />
+      {/* 입장 포탈 (각 플레이어 섬 → 스토리존) */}
+      {ENTRY_PORTALS.map((p, i) => (
+        <EntryPortal key={i} pos={p.pos} playerId={p.playerId} />
+      ))}
+
+      {/* 귀환 포탈 (스토리존 → 각 플레이어 맵) */}
+      {RETURN_PORTALS.map((p, i) => (
+        <ReturnPortal key={i} pos={p.pos} arrive={p.arrive} label={`P${i+1}`} />
+      ))}
+
+      {/* 스토리 건물 */}
       {storyZone.buildings.map(b => (
-        <Temple key={b.id} building={b} />
+        <StoryBuilding_ key={b.id} building={b} />
       ))}
     </>
   );

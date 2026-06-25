@@ -37,9 +37,11 @@ export interface StoryBuilding {
 }
 
 export interface StoryZoneState {
-  active: boolean;          // 스토리존 진입 여부
+  active: boolean;
   buildings: StoryBuilding[];
   bossSpawned: boolean;
+  currentStage: number;     // 현재 스토리 단계 (1~10)
+  clearedStages: number[];  // 클리어한 단계들
 }
 
 interface GameState {
@@ -95,6 +97,8 @@ interface GameState {
   exitStoryZone: () => void;
   damageBuilding: (id: string, dmg: number) => void;
   setBossSpawned: (v: boolean) => void;
+  advanceStoryStage: () => void;
+  setStoryStage: (stage: number) => void;
 }
 
 let eid = 0;
@@ -115,11 +119,13 @@ export const useGameStore = create<GameState>((set, get) => ({
   storyZone: {
     active: false,
     bossSpawned: false,
+    currentStage: 1,
+    clearedStages: [],
     buildings: [
       {
-        id: 'temple_1',
-        x: -30, z: 46,       // 3사분면 하단 (더 아래)
-        hp: 1000, maxHp: 1000,
+        id: 'stage_1',
+        x: 0, z: 100,
+        hp: 800, maxHp: 800,
         radius: 12,
         defeated: false,
       },
@@ -130,7 +136,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     const { rollCount, placeUnit } = get();
     if (rollCount <= 0) return;
     const type = ROLL_POOL[Math.floor(Math.random() * ROLL_POOL.length)];
-    // 플레이어1 구역 (2사분면) 정중앙
+    // 플레이어1 구역 중심 (-30, -30)
     placeUnit(type, -30, -30);
     set(s => ({ rollCount: s.rollCount - 1 }));
   },
@@ -315,4 +321,55 @@ export const useGameStore = create<GameState>((set, get) => ({
   setBossSpawned: (v) => {
     set(s => ({ storyZone: { ...s.storyZone, bossSpawned: v } }));
   },
+
+  advanceStoryStage: () => {
+    const { storyZone } = get();
+    const nextStage = Math.min(storyZone.currentStage + 1, 10);
+    const clearedStages = [...storyZone.clearedStages, storyZone.currentStage];
+    const hp = getStageHp(nextStage);
+    set(s => ({
+      storyZone: {
+        ...s.storyZone,
+        currentStage: nextStage,
+        clearedStages,
+        bossSpawned: false,
+        buildings: [{
+          id: `stage_${nextStage}`,
+          x: 0, z: 100,
+          hp, maxHp: hp,
+          radius: 12 + nextStage,
+          defeated: false,
+        }],
+      },
+    }));
+  },
+
+  setStoryStage: (stage) => {
+    const hp = getStageHp(stage);
+    set(s => ({
+      storyZone: {
+        ...s.storyZone,
+        currentStage: stage,
+        bossSpawned: false,
+        buildings: [{
+          id: `stage_${stage}`,
+          x: 0, z: 100,
+          hp, maxHp: hp,
+          radius: 12 + stage,
+          defeated: false,
+        }],
+      },
+    }));
+  },
 }));
+
+// 단계별 HP 계산
+function getStageHp(stage: number): number {
+  const hpTable: Record<number, number> = {
+    1: 800, 2: 1200, 3: 1800,
+    4: 2500, 5: 3500, 6: 5000,
+    7: 7000, 8: 10000, 9: 15000,
+    10: 25000,
+  };
+  return hpTable[stage] ?? 1000;
+}

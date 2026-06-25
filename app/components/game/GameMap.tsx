@@ -213,10 +213,7 @@ function Zone({ cx, cz, size = 40, label }: { cx: number; cz: number; size?: num
 
 export function GameMap() {
   const grassTex  = useMemo(() => createGrassTexture(0), []);
-  const stoneTex  = useMemo(() => createStonePathTexture(), []);
   const zoneTex   = useMemo(() => createZoneTexture(), []);
-  const waterTex  = useMemo(() => createWaterTexture(), []);
-  const dirtTex   = useMemo(() => createDirtTexture(), []);
 
   // 나무 위치 + 고정 scale — Math.random 사용 금지 (render 순수성)
   const trees: { pos: [number,number,number]; scale: number }[] = [
@@ -255,17 +252,7 @@ export function GameMap() {
         <meshStandardMaterial map={grassTex} roughness={0.9} />
       </mesh>
 
-      {/* ── 중앙 물길 (십자형) ── */}
-      {/* 가로 */}
-      <mesh rotation={[-Math.PI/2,0,0]} position={[0,-0.02,0]} receiveShadow>
-        <planeGeometry args={[MAP_W, 8]} />
-        <meshStandardMaterial map={waterTex} roughness={0.1} metalness={0.2} />
-      </mesh>
-      {/* 세로 */}
-      <mesh rotation={[-Math.PI/2,0,0]} position={[0,-0.02,0]} receiveShadow>
-        <planeGeometry args={[8, MAP_H]} />
-        <meshStandardMaterial map={waterTex} roughness={0.1} metalness={0.2} />
-      </mesh>
+
 
       {/* ── 4개 구역 ── */}
       {/* 2사분면 좌상 — 플레이어1 전투 구역 */}
@@ -284,14 +271,53 @@ export function GameMap() {
       </mesh>
       <gridHelper args={[32,32,'#3a6030','#3a6030']} position={[-30,0.03,-30]} />
 
-      {/* ── 경로 (돌바닥) ── */}
-      <PathSegments stoneTexture={stoneTex} />
+
 
       {/* 스폰 링 */}
       <mesh rotation={[-Math.PI/2,0,0]} position={[PATH_POINTS[0].x, 0.05, PATH_POINTS[0].z]}>
         <ringGeometry args={[1.5,2.2,32]} />
         <meshBasicMaterial color="#ff3333" transparent opacity={0.8} />
       </mesh>
+
+
+      {/* ── 스토리존 섬 (P3 섬 아래 별도 구역, z=80 중심) ── */}
+      <mesh rotation={[-Math.PI/2,0,0]} position={[0,-0.05,100]} receiveShadow>
+        <planeGeometry args={[60, 40]} />
+        <meshStandardMaterial color="#1a3a18" roughness={0.95} />
+      </mesh>
+      <mesh rotation={[-Math.PI/2,0,0]} position={[0,0,100]} receiveShadow>
+        <planeGeometry args={[44, 30]} />
+        <meshStandardMaterial color="#162e12" roughness={1} />
+      </mesh>
+      <gridHelper args={[44, 22, '#1e3a1a', '#1e3a1a']} position={[0,0.02,100]} />
+      {/* 담장 */}
+      <mesh position={[0, 0.4, 85]} castShadow receiveShadow>
+        <boxGeometry args={[45, 0.8, 0.6]} />
+        <meshStandardMaterial color="#3a2a1a" roughness={1} />
+      </mesh>
+      <mesh position={[0, 0.4, 115]} castShadow receiveShadow>
+        <boxGeometry args={[45, 0.8, 0.6]} />
+        <meshStandardMaterial color="#3a2a1a" roughness={1} />
+      </mesh>
+      <mesh position={[-22, 0.4, 100]} castShadow receiveShadow>
+        <boxGeometry args={[0.6, 0.8, 31]} />
+        <meshStandardMaterial color="#3a2a1a" roughness={1} />
+      </mesh>
+      <mesh position={[22, 0.4, 100]} castShadow receiveShadow>
+        <boxGeometry args={[0.6, 0.8, 31]} />
+        <meshStandardMaterial color="#3a2a1a" roughness={1} />
+      </mesh>
+      {/* 입구 횃불 */}
+      <group position={[-6, 0, 85]}>
+        <mesh position={[0,0.85,0]}><cylinderGeometry args={[0.07,0.07,1.6,6]} /><meshStandardMaterial color="#4a3828" /></mesh>
+        <mesh position={[0,1.7,0]}><sphereGeometry args={[0.2,8,8]} /><meshStandardMaterial color="#ff6600" emissive="#ff4400" emissiveIntensity={2.5} transparent opacity={0.9} /></mesh>
+        <pointLight position={[0,1.8,0]} color="#ff8800" intensity={5} distance={10} decay={2} />
+      </group>
+      <group position={[6, 0, 85]}>
+        <mesh position={[0,0.85,0]}><cylinderGeometry args={[0.07,0.07,1.6,6]} /><meshStandardMaterial color="#4a3828" /></mesh>
+        <mesh position={[0,1.7,0]}><sphereGeometry args={[0.2,8,8]} /><meshStandardMaterial color="#ff6600" emissive="#ff4400" emissiveIntensity={2.5} transparent opacity={0.9} /></mesh>
+        <pointLight position={[0,1.8,0]} color="#ff8800" intensity={5} distance={10} decay={2} />
+      </group>
 
       {/* ── 나무 ── */}
       {trees.map((t, i) => (
@@ -301,15 +327,7 @@ export function GameMap() {
       {/* ── 횃불 ── */}
       {torches.map((pos, i) => <Torch key={i} pos={pos} />)}
 
-      {/* ── 물 파티클 느낌 (수면 위 얇은 반투명 평면) ── */}
-      <mesh rotation={[-Math.PI/2,0,0]} position={[0,0.01,0]}>
-        <planeGeometry args={[MAP_W, 8]} />
-        <meshStandardMaterial color="#1a6090" transparent opacity={0.18} />
-      </mesh>
-      <mesh rotation={[-Math.PI/2,0,0]} position={[0,0.01,0]}>
-        <planeGeometry args={[8, MAP_H]} />
-        <meshStandardMaterial color="#1a6090" transparent opacity={0.18} />
-      </mesh>
+
     </group>
   );
 }

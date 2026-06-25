@@ -1,7 +1,7 @@
 'use client';
 
 import { Canvas, useThree } from '@react-three/fiber';
-import { OrbitControls } from '@react-three/drei';
+import { OrbitControls, useGLTF } from '@react-three/drei';
 import { Suspense, useRef, useState, useEffect, useCallback } from 'react';
 import * as THREE from 'three';
 import { GameMap } from './GameMap';
@@ -10,6 +10,9 @@ import { EnemyMesh } from './EnemyMesh';
 import { StoryZoneObjects } from './StoryZone';
 import { useGameLoop } from './GameLoop';
 import { useGameStore } from '../../store/useGameStore';
+// GLB 모델 미리 로딩 (소환 시 깜빡임 방지)
+useGLTF.preload('/models/default.glb');
+
 const GROUND_PLANE = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 
 function getWorldPos(
@@ -52,24 +55,23 @@ function SceneInner({
 
   return (
     <>
-      {/* 밝은 낮 조명 */}
-      <ambientLight intensity={1.2} color="#ffffff" />
+      {/* 주 조명 — 밝은 낮 */}
+      <ambientLight intensity={0.9} color="#e8f0ff" />
       <directionalLight
-        position={[20, 60, 10]}
-        intensity={2.5}
-        color="#fffaf0"
+        position={[20, 60, 20]}
+        intensity={2.2}
+        color="#fff8f0"
         castShadow
         shadow-mapSize={[2048, 2048]}
         shadow-camera-near={0.5}
-        shadow-camera-far={150}
-        shadow-camera-left={-70}
-        shadow-camera-right={70}
-        shadow-camera-top={70}
-        shadow-camera-bottom={-70}
+        shadow-camera-far={200}
+        shadow-camera-left={-80}
+        shadow-camera-right={80}
+        shadow-camera-top={80}
+        shadow-camera-bottom={-80}
       />
-      {/* 보조 채광 — 그림자 완화 */}
-      <directionalLight position={[-20, 30, -10]} intensity={0.8} color="#d0e8ff" />
-      <directionalLight position={[0, 20, 30]}   intensity={0.4} color="#ffffff" />
+      {/* 보조 채광 */}
+      <directionalLight position={[-30, 30, -20]} intensity={0.6} color="#c8e0ff" />
 
       <GameMap />
 
