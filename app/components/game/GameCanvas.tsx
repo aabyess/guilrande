@@ -7,9 +7,9 @@ import * as THREE from 'three';
 import { GameMap } from './GameMap';
 import { UnitMesh } from './UnitMesh';
 import { EnemyMesh } from './EnemyMesh';
+import { StoryZoneObjects } from './StoryZone';
 import { useGameLoop } from './GameLoop';
 import { useGameStore } from '../../store/useGameStore';
-
 const GROUND_PLANE = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 
 function getWorldPos(
@@ -46,32 +46,37 @@ function SceneInner({
   useEffect(() => {
     cameraRef.current = camera;
     glRef.current = gl;
+  // refs는 안정적이므로 eslint 경고 무시
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [camera, gl]);
 
   return (
     <>
-      {/* 주 조명 — 밝은 낮 */}
-      <ambientLight intensity={0.9} color="#e8f0ff" />
+      {/* 밝은 낮 조명 */}
+      <ambientLight intensity={1.2} color="#ffffff" />
       <directionalLight
-        position={[20, 60, 20]}
-        intensity={2.2}
-        color="#fff8f0"
+        position={[20, 60, 10]}
+        intensity={2.5}
+        color="#fffaf0"
         castShadow
-        shadow-mapSize={[4096, 4096]}
+        shadow-mapSize={[2048, 2048]}
         shadow-camera-near={0.5}
-        shadow-camera-far={200}
-        shadow-camera-left={-80}
-        shadow-camera-right={80}
-        shadow-camera-top={80}
-        shadow-camera-bottom={-80}
+        shadow-camera-far={150}
+        shadow-camera-left={-70}
+        shadow-camera-right={70}
+        shadow-camera-top={70}
+        shadow-camera-bottom={-70}
       />
-      {/* 보조 채광 */}
-      <directionalLight position={[-30, 30, -20]} intensity={0.6} color="#c8e0ff" />
+      {/* 보조 채광 — 그림자 완화 */}
+      <directionalLight position={[-20, 30, -10]} intensity={0.8} color="#d0e8ff" />
+      <directionalLight position={[0, 20, 30]}   intensity={0.4} color="#ffffff" />
 
       <GameMap />
 
       {units.map(unit => <UnitMesh key={unit.id} unit={unit} />)}
       {enemies.map(enemy => <EnemyMesh key={enemy.id} enemy={enemy} />)}
+
+      <StoryZoneObjects />
 
       <OrbitControls
         ref={orbitRef}
@@ -143,7 +148,7 @@ export function GameCanvas({
 
   // 엣지 스크롤 + 방향키 이동 통합 루프
   useEffect(() => {
-    const KEY_SPEED = 0.5; // 방향키 이동 속도
+    const KEY_SPEED = 0.4; // 방향키 이동 속도
 
     const loop = () => {
       edgeScrollRafRef.current = requestAnimationFrame(loop);
@@ -199,6 +204,7 @@ export function GameCanvas({
     return () => {
       if (edgeScrollRafRef.current) cancelAnimationFrame(edgeScrollRafRef.current);
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // 전역 마우스 위치 추적 (컨테이너 밖까지)
@@ -231,8 +237,8 @@ export function GameCanvas({
     if (cameraRef.current && glRef.current) {
       dragStartWorld.current = getWorldPos(e.clientX, e.clientY, cameraRef.current, glRef.current.domElement);
     }
-    // OrbitControls 좌클릭 pan 비활성화 (드래그 선택 중)
     if (orbitRef.current) orbitRef.current.enabled = false;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handlePointerMove = useCallback((e: React.PointerEvent) => {
@@ -262,7 +268,6 @@ export function GameCanvas({
     }
 
     if (isDraggingRef.current && dragStartWorld.current) {
-      // 드래그 박스 → 유닛 선택
       const endWorld = getWorldPos(e.clientX, e.clientY, cameraRef.current, glRef.current.domElement);
       if (endWorld) {
         const minX = Math.min(dragStartWorld.current.x, endWorld.x);
@@ -279,21 +284,21 @@ export function GameCanvas({
         else clearSelection();
       }
     } else {
-      // 단순 클릭 → 선택 해제 (유닛 클릭은 UnitMesh에서 처리)
       clearSelection();
     }
 
     isDraggingRef.current = false;
     dragStartScreen.current = null;
     dragStartWorld.current = null;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [units, selectUnits, clearSelection]);
 
-  // 우클릭 → 선택 유닛 이동
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     if (selectedUnitIds.length === 0 || !cameraRef.current || !glRef.current) return;
     const pos = getWorldPos(e.clientX, e.clientY, cameraRef.current, glRef.current.domElement);
     if (pos) moveSelectedUnits(pos.x, pos.z);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedUnitIds, moveSelectedUnits]);
 
   return (

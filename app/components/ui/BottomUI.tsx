@@ -158,24 +158,52 @@ function MiniMap({
         ctx.fillRect(tl.x, tl.y, rw, rh);
       }
 
-      // ── 유닛 (밝은 파란 점) ──
+      // ── 유닛 (파란 점 + 외곽선) ──
       units.forEach(u => {
         const p = toMini(u.x, u.z);
+        // 외곽 글로우
         ctx.beginPath();
-        ctx.arc(p.x, p.y, 2.5, 0, Math.PI * 2);
+        ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(68,170,255,0.25)';
+        ctx.fill();
+        // 본체
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 3.5, 0, Math.PI * 2);
         ctx.fillStyle = '#44aaff';
         ctx.fill();
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 0.8;
+        ctx.stroke();
       });
 
-      // ── 적 (빨간 점, 보스는 주황 큰 점) ──
+      // ── 적 (빨간 점 + 외곽선, 보스는 더 크게) ──
       enemies.forEach(e => {
         const v = getPathPosition(e.t);
         const p = toMini(v.x, v.z);
+        const r = e.isBoss ? 5.5 : 3.5;
+        // 외곽 글로우
         ctx.beginPath();
-        ctx.arc(p.x, p.y, e.isBoss ? 4 : 2.5, 0, Math.PI * 2);
+        ctx.arc(p.x, p.y, r + 2, 0, Math.PI * 2);
+        ctx.fillStyle = e.isBoss ? 'rgba(255,136,0,0.3)' : 'rgba(255,51,51,0.25)';
+        ctx.fill();
+        // 본체
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
         ctx.fillStyle = e.isBoss ? '#ff8800' : '#ff3333';
         ctx.fill();
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 0.8;
+        ctx.stroke();
       });
+
+      // ── 포탈 표시 (보라색 마름모) ──
+      const portalMini = toMini(-30, -10);
+      ctx.save();
+      ctx.translate(portalMini.x, portalMini.y);
+      ctx.rotate(Math.PI / 4);
+      ctx.fillStyle = '#aa44ff';
+      ctx.fillRect(-3, -3, 6, 6);
+      ctx.restore();
 
       // ── 외곽 테두리 ──
       ctx.strokeStyle = '#5a8a40';

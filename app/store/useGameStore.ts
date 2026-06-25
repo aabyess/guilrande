@@ -26,6 +26,22 @@ export interface EnemyInstance {
   isBoss: boolean;
 }
 
+export interface StoryBuilding {
+  id: string;
+  x: number;
+  z: number;
+  hp: number;
+  maxHp: number;
+  radius: number;       // 공격 사거리
+  defeated: boolean;
+}
+
+export interface StoryZoneState {
+  active: boolean;          // 스토리존 진입 여부
+  buildings: StoryBuilding[];
+  bossSpawned: boolean;
+}
+
 interface GameState {
   // 게임 페이즈
   phase: 'prepare' | 'battle';
@@ -41,6 +57,9 @@ interface GameState {
 
   // 선택
   selectedUnitIds: string[];
+
+  // 스토리존
+  storyZone: StoryZoneState;
 
   // 액션
   rollUnit: () => void;
@@ -70,6 +89,12 @@ interface GameState {
   setGameOver: (v: boolean) => void;
 
   executeCombination: (materials: string[]) => void;
+
+  // 스토리존 액션
+  enterStoryZone: () => void;
+  exitStoryZone: () => void;
+  damageBuilding: (id: string, dmg: number) => void;
+  setBossSpawned: (v: boolean) => void;
 }
 
 let eid = 0;
@@ -85,6 +110,21 @@ export const useGameStore = create<GameState>((set, get) => ({
   units: [],
   enemies: [],
   selectedUnitIds: [],
+
+  // 스토리존 초기 상태
+  storyZone: {
+    active: false,
+    bossSpawned: false,
+    buildings: [
+      {
+        id: 'temple_1',
+        x: -30, z: 46,       // 3사분면 하단 (더 아래)
+        hp: 1000, maxHp: 1000,
+        radius: 12,
+        defeated: false,
+      },
+    ],
+  },
 
   rollUnit: () => {
     const { rollCount, placeUnit } = get();
@@ -248,5 +288,31 @@ export const useGameStore = create<GameState>((set, get) => ({
     const spawnZ = toRemove[0].z;
     toRemove.forEach(u => removeUnit(u.id));
     placeUnit(resultType, spawnX, spawnZ);
+  },
+
+  // ── 스토리존 액션 ──
+  enterStoryZone: () => {
+    set(s => ({ storyZone: { ...s.storyZone, active: true } }));
+  },
+
+  exitStoryZone: () => {
+    set(s => ({ storyZone: { ...s.storyZone, active: false } }));
+  },
+
+  damageBuilding: (id, dmg) => {
+    set(s => ({
+      storyZone: {
+        ...s.storyZone,
+        buildings: s.storyZone.buildings.map(b => {
+          if (b.id !== id) return b;
+          const newHp = Math.max(0, b.hp - dmg);
+          return { ...b, hp: newHp, defeated: newHp <= 0 };
+        }),
+      },
+    }));
+  },
+
+  setBossSpawned: (v) => {
+    set(s => ({ storyZone: { ...s.storyZone, bossSpawned: v } }));
   },
 }));
