@@ -20,19 +20,29 @@ export function EnemyMesh({ enemy }: EnemyMeshProps) {
         <meshStandardMaterial color={color} />
       </mesh>
 
-      <Html position={[0, size * 0.6, 0]} center distanceFactor={8}>
-        <div style={{ width: enemy.isBoss ? '70px' : '40px', pointerEvents: 'none' }}>
-          <div style={{ width: '100%', height: enemy.isBoss ? '6px' : '4px', backgroundColor: '#333', borderRadius: '2px' }}>
+      <Html position={[0, size * 0.8 + 0.6, 0]} center distanceFactor={8}>
+        <div style={{ width: '60px', pointerEvents: 'none' }}>
+          {/* HP 바 */}
+          <div style={{
+            width: '100%', height: '7px',
+            backgroundColor: '#111',
+            border: '1px solid #444',
+            borderRadius: '2px',
+            overflow: 'hidden',
+          }}>
             <div style={{
               width: `${(enemy.hp / enemy.maxHp) * 100}%`,
               height: '100%',
-              backgroundColor: enemy.hp > enemy.maxHp * 0.5 ? '#00ff88' : '#ff4757',
-              borderRadius: '2px',
-              transition: 'width 0.05s',
+              backgroundColor: enemy.hp > enemy.maxHp * 0.5 ? '#00e676' : '#ff4757',
+              transition: 'width 0.1s',
             }} />
           </div>
           {enemy.isBoss && (
-            <div style={{ color: '#ff0000', fontSize: '9px', textAlign: 'center', fontWeight: 'bold' }}>BOSS</div>
+            <div style={{
+              color: '#ff4444', fontSize: '9px', fontWeight: 'bold',
+              textAlign: 'center', marginTop: '2px',
+              textShadow: '0 0 4px #ff0000',
+            }}>BOSS</div>
           )}
         </div>
       </Html>

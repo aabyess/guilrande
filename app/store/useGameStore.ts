@@ -90,10 +90,8 @@ export const useGameStore = create<GameState>((set, get) => ({
     const { rollCount, placeUnit } = get();
     if (rollCount <= 0) return;
     const type = ROLL_POOL[Math.floor(Math.random() * ROLL_POOL.length)];
-    // 맵 중앙 근처 랜덤 배치
-    const x = (Math.random() - 0.5) * 6;
-    const z = (Math.random() - 0.5) * 4 + 3;
-    placeUnit(type, x, z);
+    // 플레이어1 구역 (2사분면) 정중앙
+    placeUnit(type, -30, -30);
     set(s => ({ rollCount: s.rollCount - 1 }));
   },
 
@@ -117,16 +115,16 @@ export const useGameStore = create<GameState>((set, get) => ({
   moveSelectedUnits: (targetX, targetZ) => {
     const { selectedUnitIds, units } = get();
     const selected = units.filter(u => selectedUnitIds.includes(u.id));
-    const count = selected.length;
-    const cols = Math.ceil(Math.sqrt(count));
     set(s => ({
       units: s.units.map(u => {
-        const idx = selected.findIndex(s => s.id === u.id);
+        const idx = selected.findIndex(t => t.id === u.id);
         if (idx === -1) return u;
+        // 약간씩만 퍼지게 (0.4 간격 — 유닛 크기 0.7보다 작아서 겹침)
+        const cols = Math.ceil(Math.sqrt(selected.length));
         const col = idx % cols;
         const row = Math.floor(idx / cols);
-        const ox = (col - Math.floor(cols / 2)) * 1.2;
-        const oz = (row - Math.floor(count / cols / 2)) * 1.2;
+        const ox = (col - Math.floor(cols / 2)) * 0.4;
+        const oz = (row - Math.floor(selected.length / cols / 2)) * 0.4;
         return { ...u, targetX: targetX + ox, targetZ: targetZ + oz };
       })
     }));
@@ -139,16 +137,15 @@ export const useGameStore = create<GameState>((set, get) => ({
     const anchor = units.find(u => u.id === selectedUnitIds[0]);
     if (!anchor) return;
     const sameType = units.filter(u => u.type.name === anchor.type.name);
-    const count = sameType.length;
-    const cols = Math.ceil(Math.sqrt(count));
+    const cols = Math.ceil(Math.sqrt(sameType.length));
     set(s => ({
       units: s.units.map(u => {
-        const idx = sameType.findIndex(s => s.id === u.id);
+        const idx = sameType.findIndex(t => t.id === u.id);
         if (idx === -1) return u;
         const col = idx % cols;
         const row = Math.floor(idx / cols);
-        const ox = (col - Math.floor(cols / 2)) * 1.2;
-        const oz = (row - Math.floor(count / cols / 2)) * 1.2;
+        const ox = (col - Math.floor(cols / 2)) * 0.4;
+        const oz = (row - Math.floor(sameType.length / cols / 2)) * 0.4;
         return { ...u, targetX: anchor.x + ox, targetZ: anchor.z + oz };
       }),
       selectedUnitIds: sameType.slice(0, 12).map(u => u.id),

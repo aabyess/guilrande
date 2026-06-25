@@ -65,25 +65,36 @@ export function UnitMesh({ unit }: UnitMeshProps) {
       )}
 
       {/* HP + 스킬 게이지 */}
-      <Html position={[0, size * 1.8, 0]} center distanceFactor={10}>
-        <div style={{ width: '48px', pointerEvents: 'none', textAlign: 'center' }}>
-          <div style={{ fontSize: '14px', marginBottom: '2px' }}>{unit.type.emoji}</div>
-          {/* HP */}
-          <div style={{ width: '100%', height: '4px', backgroundColor: '#222', borderRadius: '2px' }}>
+      <Html position={[0, size * 2.2, 0]} center distanceFactor={10}>
+        <div style={{ width: '60px', pointerEvents: 'none' }}>
+          {/* HP 바 */}
+          <div style={{
+            width: '100%', height: '7px',
+            backgroundColor: '#111',
+            border: '1px solid #444',
+            borderRadius: '2px',
+            overflow: 'hidden',
+          }}>
             <div style={{
               width: `${(unit.hp / unit.maxHp) * 100}%`,
               height: '100%',
-              backgroundColor: unit.hp > unit.maxHp * 0.5 ? '#00ff88' : '#ff4757',
-              borderRadius: '2px',
+              backgroundColor: unit.hp > unit.maxHp * 0.5 ? '#00e676' : '#ff4757',
+              transition: 'width 0.1s',
             }} />
           </div>
-          {/* 스킬 */}
-          <div style={{ width: '100%', height: '3px', backgroundColor: '#222', borderRadius: '2px', marginTop: '2px' }}>
+          {/* 스킬 바 */}
+          <div style={{
+            width: '100%', height: '4px',
+            backgroundColor: '#111',
+            border: '1px solid #333',
+            borderRadius: '2px',
+            marginTop: '2px',
+            overflow: 'hidden',
+          }}>
             <div style={{
               width: `${unit.skillGauge}%`,
               height: '100%',
               backgroundColor: '#00cfff',
-              borderRadius: '2px',
             }} />
           </div>
         </div>

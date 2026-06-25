@@ -50,25 +50,23 @@ function SceneInner({
 
   return (
     <>
-      {/* 판타지 조명 */}
-      <ambientLight intensity={0.35} color="#b8d4ff" />
+      {/* 주 조명 — 밝은 낮 */}
+      <ambientLight intensity={0.9} color="#e8f0ff" />
       <directionalLight
-        position={[8, 25, 5]}
-        intensity={1.4}
-        color="#fff5e0"
+        position={[20, 60, 20]}
+        intensity={2.2}
+        color="#fff8f0"
         castShadow
-        shadow-mapSize={[2048, 2048]}
+        shadow-mapSize={[4096, 4096]}
         shadow-camera-near={0.5}
-        shadow-camera-far={80}
-        shadow-camera-left={-25}
-        shadow-camera-right={25}
-        shadow-camera-top={25}
-        shadow-camera-bottom={-25}
+        shadow-camera-far={200}
+        shadow-camera-left={-80}
+        shadow-camera-right={80}
+        shadow-camera-top={80}
+        shadow-camera-bottom={-80}
       />
-      {/* 달빛 느낌 보조 조명 */}
-      <directionalLight position={[-15, 10, -10]} intensity={0.3} color="#6080ff" />
-      {/* 하늘 안개 */}
-      <fog attach="fog" args={["#0a1520", 30, 70]} />
+      {/* 보조 채광 */}
+      <directionalLight position={[-30, 30, -20]} intensity={0.6} color="#c8e0ff" />
 
       <GameMap />
 
@@ -78,14 +76,19 @@ function SceneInner({
       <OrbitControls
         ref={orbitRef}
         enableRotate={false}
-        enablePan={true}
+        enablePan={false}
         enableZoom={true}
-        minDistance={8}
-        maxDistance={40}
+        zoomToCursor={false}
+        minDistance={12}
+        maxDistance={100}
         mouseButtons={{
           LEFT: undefined as any,
           MIDDLE: THREE.MOUSE.DOLLY,
-          RIGHT: THREE.MOUSE.PAN,
+          RIGHT: undefined as any,
+        }}
+        touches={{
+          ONE: undefined as any,
+          TWO: undefined as any,
         }}
         target={[0, 0, 0]}
       />
@@ -93,22 +96,126 @@ function SceneInner({
   );
 }
 
-export function GameCanvas() {
+export function GameCanvas({
+  cameraRef: externalCameraRef,
+  orbitRef: externalOrbitRef,
+}: {
+  cameraRef?: React.MutableRefObject<THREE.Camera | null>;
+  orbitRef?: React.MutableRefObject<any>;
+}) {
   const { units, selectedUnitIds, selectUnits, clearSelection, moveSelectedUnits, gatherSameType } = useGameStore();
 
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // V키: 같은 타입 유닛 집결
+  // 키보드 상태 추적 (방향키)
+  const keysRef = useRef<Set<string>>(new Set());
+
+  // V키 + 방향키 통합
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'v' || e.key === 'V') gatherSameType();
+      if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)) {
+        e.preventDefault();
+        keysRef.current.add(e.key);
+      }
+    };
+    const onKeyUp = (e: KeyboardEvent) => {
+      keysRef.current.delete(e.key);
     };
     window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+    };
   }, [gatherSameType]);
-  const cameraRef = useRef<THREE.Camera | null>(null);
+  const internalCameraRef = useRef<THREE.Camera | null>(null);
+  const cameraRef = externalCameraRef ?? internalCameraRef;
   const glRef = useRef<THREE.WebGLRenderer | null>(null);
-  const orbitRef = useRef<any>(null);
+  const internalOrbitRef = useRef<any>(null);
+  const orbitRef = externalOrbitRef ?? internalOrbitRef;
+
+  // 엣지 스크롤 설정
+  const EDGE_THRESHOLD = 60;   // 가장자리 감지 픽셀
+  const SCROLL_SPEED = 0.1;   // 카메라 이동 속도
+  const mousePosRef = useRef<{ x: number; y: number } | null>(null);
+  const edgeScrollRafRef = useRef<number | null>(null);
+
+  // 엣지 스크롤 + 방향키 이동 통합 루프
+  useEffect(() => {
+    const KEY_SPEED = 0.5; // 방향키 이동 속도
+
+    const loop = () => {
+      edgeScrollRafRef.current = requestAnimationFrame(loop);
+      if (!cameraRef.current || !orbitRef.current) return;
+
+      const cam = cameraRef.current as THREE.PerspectiveCamera;
+      const controls = orbitRef.current;
+
+      const forward = new THREE.Vector3();
+      cam.getWorldDirection(forward);
+      forward.y = 0;
+      forward.normalize();
+      const right = new THREE.Vector3();
+      right.crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
+
+      let dx = 0, dz = 0;
+
+      // ── 방향키 ──
+      const keys = keysRef.current;
+      if (keys.has('ArrowLeft'))  dx -= KEY_SPEED;
+      if (keys.has('ArrowRight')) dx += KEY_SPEED;
+      if (keys.has('ArrowUp'))    dz -= KEY_SPEED;
+      if (keys.has('ArrowDown'))  dz += KEY_SPEED;
+
+      // ── 엣지 스크롤 ──
+      const container = containerRef.current;
+      const mp = mousePosRef.current;
+      if (container && mp) {
+        const rect = container.getBoundingClientRect();
+        const lx = mp.x - rect.left;
+        const ly = mp.y - rect.top;
+        const rw = rect.width, rh = rect.height;
+        if (mp.x >= rect.left && mp.x <= rect.right && mp.y >= rect.top && mp.y <= rect.bottom) {
+          if (lx < EDGE_THRESHOLD) dx -= ((EDGE_THRESHOLD - lx) / EDGE_THRESHOLD) * SCROLL_SPEED * 10;
+          else if (lx > rw - EDGE_THRESHOLD) dx += ((lx - (rw - EDGE_THRESHOLD)) / EDGE_THRESHOLD) * SCROLL_SPEED * 10;
+          if (ly < EDGE_THRESHOLD) dz -= ((EDGE_THRESHOLD - ly) / EDGE_THRESHOLD) * SCROLL_SPEED * 10;
+          else if (ly > rh - EDGE_THRESHOLD) dz += ((ly - (rh - EDGE_THRESHOLD)) / EDGE_THRESHOLD) * SCROLL_SPEED * 10;
+        }
+      }
+
+      if (dx === 0 && dz === 0) return;
+
+      const move = new THREE.Vector3()
+        .addScaledVector(right, dx)
+        .addScaledVector(forward, -dz);
+
+      cam.position.add(move);
+      if (controls.target) controls.target.add(move);
+      controls.update();
+    };
+
+    edgeScrollRafRef.current = requestAnimationFrame(loop);
+    return () => {
+      if (edgeScrollRafRef.current) cancelAnimationFrame(edgeScrollRafRef.current);
+    };
+  }, []);
+
+  // 전역 마우스 위치 추적 (컨테이너 밖까지)
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      mousePosRef.current = { x: e.clientX, y: e.clientY };
+    };
+    const onLeave = () => {
+      mousePosRef.current = null;
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseleave', onLeave);
+    return () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseleave', onLeave);
+    };
+  }, []);
 
   // 드래그 상태
   const isDraggingRef = useRef(false);
@@ -194,7 +301,7 @@ export function GameCanvas() {
       ref={containerRef}
       style={{
         width: '100%',
-        height: 'calc(100dvh - 240px)',
+        height: '100dvh',
         position: 'relative',
         userSelect: 'none',
         cursor: selectedUnitIds.length > 0 ? 'crosshair' : 'default',
@@ -206,7 +313,7 @@ export function GameCanvas() {
     >
       <Canvas
         shadows
-        camera={{ position: [0, 22, 14], fov: 45 }}
+        camera={{ position: [0, 45, 30], fov: 45 }}
         gl={{ antialias: true }}
         onContextMenu={e => e.preventDefault()}
       >
@@ -249,7 +356,7 @@ export function GameCanvas() {
           pointerEvents: 'none',
           border: '1px solid #00ff88',
         }}>
-          {selectedUnitIds.length === 1 ? '유닛 선택됨 — 우클릭으로 이동' : `${selectedUnitIds.length}개 선택됨 — 우클릭으로 이동`}
+          {selectedUnitIds.length === 1 ? '유닛 선택됨 — 우클릭으로 이동 · 가장자리로 카메라 이동' : `${selectedUnitIds.length}개 선택됨 — 우클릭으로 이동 · 가장자리로 카메라 이동`}
         </div>
       )}
     </div>
