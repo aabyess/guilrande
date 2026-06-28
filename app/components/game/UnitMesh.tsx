@@ -17,15 +17,16 @@ const RARITY_EMISSIVE_INTENSITY: Record<string, number> = {
 
 const SCALE = 1.6;
 
-// 유닛별 GLB 경로 — 없으면 default
 const UNIT_MODEL_MAP: Record<string, string> = {
   '김수빈': '/models/subin.glb',
 };
 
-// 유닛별 rotation — 없으면 기본값 [0, Math.PI, 0]
 const UNIT_MODEL_ROTATION: Record<string, [number, number, number]> = {
   '김수빈': [0, 0, 0],
 };
+
+// ── 모델별 scene 캐시 (clone 비용 절감) ──────────────────────
+const sceneCache = new Map<string, THREE.Group>();
 
 function UnitModel({ unit, isSelected, hovered }: {
   unit: UnitInstance; isSelected: boolean; hovered: boolean;
@@ -33,8 +34,16 @@ function UnitModel({ unit, isSelected, hovered }: {
   const modelPath = UNIT_MODEL_MAP[unit.type.name] ?? '/models/default.glb';
   const rotation  = UNIT_MODEL_ROTATION[unit.type.name] ?? [0, Math.PI, 0];
 
-  const { scene, animations } = useGLTF(modelPath);
-  const clonedScene = useMemo(() => SkeletonUtils.clone(scene), [scene]);
+  // 메시용 GLB
+  const { scene } = useGLTF(modelPath);
+  // 애니메이션은 항상 default.glb에서 (subin.glb엔 없음)
+  const { animations } = useGLTF('/models/default.glb');
+
+  // scene 캐시 → clone
+  const clonedScene = useMemo(() => {
+    if (!sceneCache.has(modelPath)) sceneCache.set(modelPath, scene);
+    return SkeletonUtils.clone(sceneCache.get(modelPath)!);
+  }, [modelPath, scene]);
 
   const groupRef = useRef<THREE.Group>(null);
   const { actions, mixer } = useAnimations(animations, groupRef);
@@ -76,6 +85,10 @@ function UnitModel({ unit, isSelected, hovered }: {
   );
 }
 
+// preload — 앱 시작 시 즉시 캐싱
+useGLTF.preload('/models/default.glb');
+useGLTF.preload('/models/subin.glb');
+
 interface UnitMeshProps { unit: UnitInstance; }
 
 export function UnitMesh({ unit }: UnitMeshProps) {
@@ -91,13 +104,11 @@ export function UnitMesh({ unit }: UnitMeshProps) {
       onPointerOver={e => { e.stopPropagation(); setHovered(true); }}
       onPointerOut={() => setHovered(false)}
     >
-      {/* 그림자 */}
       <mesh rotation={[-Math.PI/2,0,0]} position={[0,0.01,0]} scale={[1,0.6,1]}>
         <circleGeometry args={[0.5,16]} />
         <meshBasicMaterial color="#000000" transparent opacity={0.25} />
       </mesh>
 
-      {/* 레어리티 오라 */}
       {(() => {
         const AURA: Record<string, { color: string; opacity: number; r1: number; r2: number }> = {
           common:    { color: '#00ff88', opacity: 0.45, r1: 0.55, r2: 0.85 },
@@ -133,14 +144,9 @@ export function UnitMesh({ unit }: UnitMeshProps) {
       <Html position={[0, 2.2, 0]} center distanceFactor={10}>
         <div style={{ width:'80px', pointerEvents:'none' }}>
           <div style={{
-            textAlign: 'center',
-            color: '#ffffff',
-            fontSize: '11px',
-            fontWeight: 'bold',
+            textAlign: 'center', color: '#ffffff', fontSize: '11px', fontWeight: 'bold',
             fontFamily: '"Dotum", "굴림", sans-serif',
-            textShadow: '0 0 4px #000, 0 0 4px #000',
-            marginBottom: '3px',
-            whiteSpace: 'nowrap',
+            textShadow: '0 0 4px #000, 0 0 4px #000', marginBottom: '3px', whiteSpace: 'nowrap',
           }}>
             {unit.type.name}
           </div>
