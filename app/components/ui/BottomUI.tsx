@@ -5,6 +5,7 @@ import { getCombinationsForUnit, canCombine } from '../../game/combinations/Comb
 import { RARITY_LABEL } from '../../game/units/UnitTypes';
 import { useEffect, useRef, useCallback, useState } from 'react';import * as THREE from 'three';
 import { getPathPosition } from '../../game/path/EnemyPath';
+import ChatBox from '../ui/ChatBox';
 
 const MAP_W = 120;
 const MAP_H = 220;
@@ -540,7 +541,7 @@ export function BottomUI({
         )}
       </div>
 
-      {/* ══ 조합 패널 ════════════════════════════════════════ */}
+      {/* ══ 명령 + 조합 레시피 통합 패널 ══════════════════ */}
       <div style={{
         width: '280px',
         height: '100%',
@@ -551,20 +552,50 @@ export function BottomUI({
         flexDirection: 'column',
         overflow: 'hidden',
       }}>
+        {/* 상단: 명령 버튼 */}
+        <div style={{
+          flexShrink: 0,
+          padding: '6px 8px',
+          borderBottom: `2px solid ${WC_BORDER2}`,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '5px',
+        }}>
+          <div style={{
+            color: '#aa9060', fontSize: '11px',
+            textAlign: 'center',
+            borderBottom: `1px solid ${WC_BORDER}`,
+            paddingBottom: '3px',
+          }}>명령</div>
+          <div style={{ display: 'flex', justifyContent: 'center', gap: '4px' }}>
+            <button title="공격 이동 (A)" style={wcBtn(true, '#ff8844')} onClick={() => {}}>
+              <span style={{ fontSize: '20px' }}>⚔</span>
+              <span>공격</span>
+              <span style={{ fontSize: '9px', color: '#6a5030' }}>(A)</span>
+            </button>
+            <button title="정지 (S)" style={wcBtn(true, '#ccaa44')} onClick={() => {}}>
+              <span style={{ fontSize: '20px' }}>🛑</span>
+              <span>정지</span>
+              <span style={{ fontSize: '9px', color: '#6a5030' }}>(S)</span>
+            </button>
+            <button title="같은 타입 모이기 (V)" style={wcBtn(true, '#44aaff')} onClick={() => useGameStore.getState().gatherSameType()}>
+              <span style={{ fontSize: '20px' }}>🔵</span>
+              <span>모이기</span>
+              <span style={{ fontSize: '9px', color: '#304060' }}>(V)</span>
+            </button>
+          </div>
+        </div>
+
+        {/* 하단: 조합 레시피 */}
         <div style={{
           background: 'linear-gradient(to bottom, #2a1e04, #120e02)',
           borderBottom: `1px solid ${WC_BORDER2}`,
-          padding: '5px 10px',
-          color: '#ffd060',
-          fontSize: '12px',
-          fontWeight: 'bold',
-          flexShrink: 0,
-          textShadow: '0 0 6px #aa7700',
-        }}>
-          🧪 조합 레시피
-        </div>
+          padding: '4px 10px',
+          color: '#ffd060', fontSize: '12px', fontWeight: 'bold',
+          flexShrink: 0, textShadow: '0 0 6px #aa7700',
+        }}>🧪 조합 레시피</div>
         <div style={{
-          flex: 1, padding: '8px', overflowY: 'auto',
+          flex: 1, padding: '6px', overflowY: 'auto',
           display: 'flex', flexWrap: 'wrap', gap: '6px', alignContent: 'flex-start',
         }}>
           {selectedUnit && combinations.length > 0 ? (
@@ -593,9 +624,7 @@ export function BottomUI({
                     color: possible ? '#88ff44' : '#5a5040',
                     fontSize: '10px', fontWeight: 'bold',
                     textAlign: 'center', lineHeight: 1.2, wordBreak: 'keep-all',
-                  }}>
-                    {combo.result}
-                  </div>
+                  }}>{combo.result}</div>
                   {possible && (
                     <div style={{ position: 'absolute', top: 2, right: 3, color: '#88ff44', fontSize: '9px' }}>✔</div>
                   )}
@@ -610,44 +639,11 @@ export function BottomUI({
         </div>
       </div>
 
-      {/* ══ 오른쪽: 커맨드 버튼 ══════════════════════════════ */}
-      <div style={{
-        width: '180px',
-        height: '100%',
-        flexShrink: 0,
-        backgroundColor: WC_BG,
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: '6px',
-        padding: '10px',
-      }}>
-        <div style={{
-          color: '#aa9060', fontSize: '11px', marginBottom: '2px',
-          borderBottom: `1px solid ${WC_BORDER}`,
-          width: '100%', textAlign: 'center', paddingBottom: '4px',
-        }}>
-          명령
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,54px)', gap: '4px' }}>
-          <button title="공격 이동 (A)" style={wcBtn(true, '#ff8844')} onClick={() => {}}>
-            <span style={{ fontSize: '20px' }}>⚔</span>
-            <span>공격</span>
-            <span style={{ fontSize: '9px', color: '#6a5030' }}>(A)</span>
-          </button>
-          <button title="정지 (S)" style={wcBtn(true, '#ccaa44')} onClick={() => {}}>
-            <span style={{ fontSize: '20px' }}>🛑</span>
-            <span>정지</span>
-            <span style={{ fontSize: '9px', color: '#6a5030' }}>(S)</span>
-          </button>
-          <button title="같은 타입 모이기 (V)" style={wcBtn(true, '#44aaff')} onClick={() => useGameStore.getState().gatherSameType()}>
-            <span style={{ fontSize: '20px' }}>🔵</span>
-            <span>모이기</span>
-            <span style={{ fontSize: '9px', color: '#304060' }}>(V)</span>
-          </button>
-        </div>
-      </div>
+      {/* ══ 채팅 패널 ═══════════════════════════════════════
+          📌 수정 포인트: 채팅창 너비는 ChatBox.tsx 안에서 width로 조절
+          현재 260px — BottomUI 전체 너비가 좁으면 줄이세요          ══ */}
+      <ChatBox />
+
     </div>
   );
 }

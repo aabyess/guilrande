@@ -117,10 +117,34 @@ export function useGameLoop() {
     // ── 유닛 이동 (lerp) — 배치 setState ─────────────
     const MOVE_SPEED = 0.08;
     const units = useGameStore.getState().units;
-    const hasMoving = units.some(u => u.targetX !== undefined);
+    const currentEnemiesForMove = useGameStore.getState().enemies;
+
+    const hasMoving = units.some(u => u.targetX !== undefined || u.attackTargetId !== undefined);
     if (hasMoving) {
       useGameStore.setState(cur => ({
         units: cur.units.map(u => {
+          // A키 공격 타겟 추적 이동
+          if (u.attackTargetId !== undefined) {
+            const targetEnemy = currentEnemiesForMove.find(e => e.id === u.attackTargetId);
+            if (!targetEnemy) {
+              // 타겟 사라짐 → 타겟 해제
+              return { ...u, attackTargetId: undefined };
+            }
+            const ePos = getPathPosition(targetEnemy.t);
+            const dx = ePos.x - u.x;
+            const dz = ePos.z - u.z;
+            const dist = Math.sqrt(dx * dx + dz * dz);
+            // 사거리 안에 들어오면 이동 멈추고 공격
+            if (dist < u.type.range / 10) {
+              return { ...u, targetX: undefined, targetZ: undefined };
+            }
+            // 사거리 밖이면 타겟 방향으로 이동
+            const nx = u.x + (dx / dist) * MOVE_SPEED;
+            const nz = u.z + (dz / dist) * MOVE_SPEED;
+            return { ...u, x: nx, z: nz, targetX: undefined, targetZ: undefined };
+          }
+
+          // 일반 이동
           if (u.targetX === undefined || u.targetZ === undefined) return u;
           const dx = u.targetX - u.x;
           const dz = u.targetZ - u.z;
@@ -194,5 +218,9 @@ export function useGameLoop() {
         }),
       }));
     }
+
+    // 공격 중인 유닛 ID → store에 반영 (UnitMesh 애니메이션 전환용)
+    // unitUpdates에 들어간 유닛 = 이번 프레임에 실제로 공격한 유닛
+    useGameStore.getState().setAttackingUnitIds(new Set(unitUpdates.keys()));
   });
 }

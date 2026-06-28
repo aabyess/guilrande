@@ -13,6 +13,7 @@ export interface UnitInstance {
   lastFired: number;
   targetX?: number;
   targetZ?: number;
+  attackTargetId?: string; // A키로 지정한 공격 대상 적 ID
 }
 
 export interface EnemyInstance {
@@ -45,6 +46,22 @@ export interface StoryZoneState {
   clearedStages: number[];
 }
 
+// ─────────────────────────────────────────────
+// 📌 시야(줌) 프리셋 — 카메라 Y 높이값
+// 수정 포인트: 실제 게임에서 보이는 시야가 너무 좁거나 넓으면
+// 아래 숫자를 조절하세요. 숫자가 클수록 더 멀리서 봄(줌아웃).
+// GameCanvas camera 초기값이 position: [0, 45, 30] 이므로 그 기준으로 잡음.
+// ─────────────────────────────────────────────
+// 시야 프리셋 — Y값만 지정, Z는 GameCanvas에서 Y:Z 비율 유지하며 자동 계산
+// 초기 카메라: position[0, 45, 30] → Y:Z = 45:30 = 3:2 비율 고정
+// 📌 수정 포인트: 줌 범위 맘에 안 들면 여기 숫자만 수정하면 됨
+export const VISION_PRESETS = {
+  100: 30,
+  150: 35,
+  200: 40,
+} as const;
+export type VisionLevel = keyof typeof VISION_PRESETS;
+
 interface GameState {
   phase: 'prepare' | 'battle';
   round: number;
@@ -59,12 +76,26 @@ interface GameState {
   selectedUnitIds: string[];
   storyZone: StoryZoneState;
 
+  // ─────────────────────────────────────────────
+  // 📌 추가된 카메라 시야 상태
+  // ─────────────────────────────────────────────
+  visionLevel: VisionLevel;
+  targetCameraY: number;
+  setCameraVision: (level: VisionLevel) => void;
+  setTargetCameraY: (y: number) => void;
+
+  // 현재 공격 중인 유닛 ID 목록 (애니메이션 전환용)
+  attackingUnitIds: Set<string>;
+  setAttackingUnitIds: (ids: Set<string>) => void;
+
   rollUnit: () => void;
   rollSpecial: () => void;
   placeUnit: (type: UnitType, x: number, z: number) => void;
   moveUnit: (id: string, x: number, z: number) => void;
   moveSelectedUnits: (targetX: number, targetZ: number) => void;
   gatherSameType: () => void;
+  stopSelectedUnits: () => void;
+  setAttackTarget: (targetId: string | undefined) => void;
   selectUnits: (ids: string[]) => void;
   clearSelection: () => void;
   removeUnit: (id: string) => void;
@@ -96,7 +127,6 @@ interface GameState {
   setStoryStage: (stage: number) => void;
 }
 
-// ── 라운드별 적 이름 ──────────────────────────────────────────
 const ROUND_ENEMY_NAMES: Record<number, string> = {
   1:'박진웅', 2:'김갑식', 3:'반항아이승우', 4:'배병욱', 5:'왕승환',
   6:'이재윤', 7:'인홍진', 8:'문필환', 9:'김민준(안경)',
@@ -137,6 +167,22 @@ export const useGameStore = create<GameState>((set, get) => ({
   enemies: [],
   selectedUnitIds: [],
 
+  // ─────────────────────────────────────────────
+  // 📌 카메라 초기 시야: 150 (Y=45, Canvas camera 기본값과 맞춤)
+  // ─────────────────────────────────────────────
+  visionLevel: 150,
+  targetCameraY: 35,
+  attackingUnitIds: new Set<string>(),
+
+  setCameraVision: (level: VisionLevel) => {
+    set({ visionLevel: level, targetCameraY: VISION_PRESETS[level] });
+  },
+
+  // 마우스 휠 줌 시 현재 Y값으로 직접 동기화
+  setTargetCameraY: (y: number) => set({ targetCameraY: y }),
+
+  setAttackingUnitIds: (ids: Set<string>) => set({ attackingUnitIds: ids }),
+
   storyZone: {
     active: false,
     bossSpawned: false,
@@ -158,7 +204,6 @@ export const useGameStore = create<GameState>((set, get) => ({
   rollSpecial: () => {
     const { specialRollCount, placeUnit } = get();
     if (specialRollCount <= 0) return;
-    // 특별함 = rarity 'rare'
     const pool = UNIT_TYPES.filter(t => t.rarity === 'rare');
     if (pool.length === 0) return;
     const type = pool[Math.floor(Math.random() * pool.length)];
@@ -195,6 +240,28 @@ export const useGameStore = create<GameState>((set, get) => ({
         const oz = (row - Math.floor(selected.length / cols / 2)) * 0.4;
         return { ...u, targetX: targetX + ox, targetZ: targetZ + oz };
       })
+    }));
+  },
+
+  stopSelectedUnits: () => {
+    const { selectedUnitIds } = get();
+    set(s => ({
+      units: s.units.map(u =>
+        selectedUnitIds.includes(u.id)
+          ? { ...u, targetX: undefined, targetZ: undefined, attackTargetId: undefined }
+          : u
+      ),
+    }));
+  },
+
+  setAttackTarget: (targetId) => {
+    const { selectedUnitIds } = get();
+    set(s => ({
+      units: s.units.map(u =>
+        selectedUnitIds.includes(u.id)
+          ? { ...u, attackTargetId: targetId }
+          : u
+      ),
     }));
   },
 

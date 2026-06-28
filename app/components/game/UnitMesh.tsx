@@ -6,6 +6,7 @@ import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { SkeletonUtils } from 'three-stdlib';
 import { useGameStore, UnitInstance } from '../../store/useGameStore';
+import { getPathPosition } from '../../game/path/EnemyPath';
 
 const RARITY_EMISSIVE: Record<string, string> = {
   common: '#000000', uncommon: '#004a46', rare: '#3a0070',
@@ -19,25 +20,59 @@ const SCALE = 1.6;
 
 const UNIT_MODEL_MAP: Record<string, string> = {
   '김수빈': '/models/subin.glb',
+  '최상호': '/models/onePieces/onepiece_fake_luffy.glb',
+  '노태현': '/models/onePieces/onepiece_akainu.glb',
+  '양재모': '/models/onePieces/onepiece_jabra_cp0.glb',
+  '박민석': '/models/onePieces/onepiece_sanji.glb',
 };
 
 const UNIT_MODEL_ROTATION: Record<string, [number, number, number]> = {
   '김수빈': [0, 0, 0],
+  '최상호': [0, Math.PI, 0],
+  '노태현': [0, Math.PI, 0],
+  '양재모': [0, Math.PI, 0],
+  '박민석': [0, Math.PI, 0],
 };
+
+// 유닛별 자체 애니 이름 (idle / attack)
+// 없으면 default.glb fallback 사용
+const UNIT_ANIM_MAP: Record<string, { idle: string; attack: string }> = {
+  '최상호': { idle: 'pl_demaroblack_orig01_idle_a', attack: 'pl_demaroblack_orig01_combo_a' },
+  '노태현': { idle: 'pl_akainu_gens01_idle_a',      attack: 'pl_akainu_gens01_combo_a'     },
+  '양재모': { idle: 'pl_jabra_jinj01_idle_a',       attack: 'pl_jabra_jinj01_combo_a'      },
+  // 박민석(sanji)은 mixamo 애니 1개 → default fallback 사용
+};
+
+// 자체 애니가 있는 유닛
+const NATIVE_ANIM_UNITS = new Set<string>(Object.keys(UNIT_ANIM_MAP));
+
+// 📌 수정 포인트: 반대면 두 줄만 swap
+const ANIM_ATTACK = 'mixamo.com';      // index 0
+const ANIM_IDLE   = 'mixamo.com.001';  // index 1
+
+// 📌 애니메이션 완전히 끄고 싶은 유닛 이름 추가
+const NO_ANIMATION_UNITS = new Set<string>([
+  '김수빈',
+]);
 
 // ── 모델별 scene 캐시 (clone 비용 절감) ──────────────────────
 const sceneCache = new Map<string, THREE.Group>();
 
-function UnitModel({ unit, isSelected, hovered }: {
-  unit: UnitInstance; isSelected: boolean; hovered: boolean;
+function UnitModel({ unit, isSelected, hovered, isAttacking }: {
+  unit: UnitInstance; isSelected: boolean; hovered: boolean; isAttacking: boolean;
 }) {
-  const modelPath = UNIT_MODEL_MAP[unit.type.name] ?? '/models/default.glb';
-  const rotation  = UNIT_MODEL_ROTATION[unit.type.name] ?? [0, Math.PI, 0];
+  const modelPath  = UNIT_MODEL_MAP[unit.type.name] ?? '/models/default.glb';
+  const rotation   = UNIT_MODEL_ROTATION[unit.type.name] ?? [0, Math.PI, 0];
+  const isNative   = NATIVE_ANIM_UNITS.has(unit.type.name);
+  const nativeAnim = UNIT_ANIM_MAP[unit.type.name];
 
   // 메시용 GLB
   const { scene } = useGLTF(modelPath);
-  // 애니메이션은 항상 default.glb에서 (subin.glb엔 없음)
-  const { animations } = useGLTF('/models/default.glb');
+  // 자체 애니가 없는 유닛은 default.glb에서 애니 차용
+  const { animations: defaultAnims } = useGLTF('/models/default.glb');
+  const { animations: modelAnims }   = useGLTF(modelPath);
+
+  const animations = isNative ? modelAnims : defaultAnims;
 
   // scene 캐시 → clone
   const clonedScene = useMemo(() => {
@@ -47,20 +82,112 @@ function UnitModel({ unit, isSelected, hovered }: {
 
   const groupRef = useRef<THREE.Group>(null);
   const { actions, mixer } = useAnimations(animations, groupRef);
+  const facingRef = useRef<number>(0); // 현재 Y rotation (라디안)
 
   const emissiveColor = RARITY_EMISSIVE[unit.type.rarity] ?? '#000000';
   const emissiveInt   = RARITY_EMISSIVE_INTENSITY[unit.type.rarity] ?? 0;
 
-  useEffect(() => {
-    if (!actions) return;
-    const keys = Object.keys(actions);
-    if (keys.length === 0) return;
-    const action = actions['Idle'] ?? actions['idle'] ?? actions[keys[0]];
-    action?.reset().fadeIn(0.3).play();
-    return () => { action?.fadeOut(0.2); };
-  }, [actions]);
+  const prevAttackingRef = useRef<boolean | null>(null);
 
-  useFrame((_, delta) => { mixer?.update(delta); });
+  useEffect(() => {
+    // NO_ANIMATION_UNITS → 무조건 정지
+    if (NO_ANIMATION_UNITS.has(unit.type.name)) return;
+    if (!actions) return;
+
+    const attackKey = isNative ? nativeAnim?.attack : ANIM_ATTACK;
+    const idleKey   = isNative ? nativeAnim?.idle   : ANIM_IDLE;
+
+    // 처음 마운트 시 → idle 재생
+    if (prevAttackingRef.current === null) {
+      if (idleKey && actions[idleKey]) {
+        actions[idleKey]?.reset().fadeIn(0.2).play();
+      } else {
+        Object.values(actions).forEach(a => a?.stop());
+      }
+      prevAttackingRef.current = false;
+      return;
+    }
+
+    // 상태 변화 없으면 스킵
+    if (prevAttackingRef.current === isAttacking) return;
+    prevAttackingRef.current = isAttacking;
+
+    if (isAttacking) {
+      if (idleKey) actions[idleKey]?.fadeOut(0.15);
+      if (attackKey && actions[attackKey]) {
+        actions[attackKey]?.reset().fadeIn(0.15).play();
+      }
+    } else {
+      if (attackKey) actions[attackKey]?.fadeOut(0.15);
+      if (idleKey && actions[idleKey]) {
+        actions[idleKey]?.reset().fadeIn(0.2).play();
+      }
+    }
+  }, [actions, isAttacking, isNative, nativeAnim, unit.type.name]);
+
+  useFrame((_, delta) => {
+    if (NO_ANIMATION_UNITS.has(unit.type.name)) return;
+    // 📌 수정 포인트: 애니메이션 재생 속도 (1.0 = 기본, 0.6 = 느리게, 2.0 = 빠르게)
+    const ATTACK_SPEED = 0.005;
+    const IDLE_SPEED   = 0.8;
+    mixer?.update(delta * (isAttacking ? ATTACK_SPEED : IDLE_SPEED));
+
+    if (!groupRef.current) return;
+
+    const enemies = useGameStore.getState().enemies;
+    let targetAngle: number | null = null;
+
+    if (isAttacking && enemies.length > 0) {
+      // 공격 중 → A키 타겟 우선, 없으면 가장 가까운 적
+      let nearestAngle = facingRef.current;
+      let minDist = Infinity;
+
+      const attackTarget = unit.attackTargetId
+        ? enemies.find(e => e.id === unit.attackTargetId)
+        : undefined;
+
+      const targets = attackTarget ? [attackTarget] : enemies;
+
+      for (const enemy of targets) {
+        const ePos = getPathPosition(enemy.t);
+        const dx = ePos.x - unit.x;
+        const dz = ePos.z - unit.z;
+        const dist = Math.sqrt(dx * dx + dz * dz);
+        if (dist < minDist) {
+          minDist = dist;
+          nearestAngle = Math.atan2(dx, dz);
+        }
+      }
+      targetAngle = nearestAngle;
+    } else if (!isAttacking && unit.attackTargetId !== undefined) {
+      // A키 타겟 추적 이동 중 → 타겟 방향 바라보기
+      const attackTarget = enemies.find(e => e.id === unit.attackTargetId);
+      if (attackTarget) {
+        const ePos = getPathPosition(attackTarget.t);
+        const dx = ePos.x - unit.x;
+        const dz = ePos.z - unit.z;
+        targetAngle = Math.atan2(dx, dz);
+      }
+    } else if (!isAttacking && unit.targetX !== undefined && unit.targetZ !== undefined) {
+      // 이동 중 → 이동 방향
+      const dx = unit.targetX - unit.x;
+      const dz = unit.targetZ - unit.z;
+      if (Math.abs(dx) > 0.05 || Math.abs(dz) > 0.05) {
+        targetAngle = Math.atan2(dx, dz);
+      }
+    }
+
+    if (targetAngle !== null) {
+      // 📌 수정 포인트: 회전 보간 속도 (높을수록 빠르게 돌아봄)
+      const ROTATE_SPEED = 8;
+      let diff = targetAngle - facingRef.current;
+      // -π ~ π 범위로 정규화
+      while (diff > Math.PI) diff -= Math.PI * 2;
+      while (diff < -Math.PI) diff += Math.PI * 2;
+      facingRef.current += diff * Math.min(1, ROTATE_SPEED * delta);
+      groupRef.current.rotation.y = facingRef.current;
+    }
+  });
 
   useEffect(() => {
     clonedScene.traverse((obj) => {
@@ -88,13 +215,18 @@ function UnitModel({ unit, isSelected, hovered }: {
 // preload — 앱 시작 시 즉시 캐싱
 useGLTF.preload('/models/default.glb');
 useGLTF.preload('/models/subin.glb');
+useGLTF.preload('/models/onePieces/onepiece_fake_luffy.glb');
+useGLTF.preload('/models/onePieces/onepiece_akainu.glb');
+useGLTF.preload('/models/onePieces/onepiece_jabra_cp0.glb');
+useGLTF.preload('/models/onePieces/onepiece_sanji.glb');
 
 interface UnitMeshProps { unit: UnitInstance; }
 
 export function UnitMesh({ unit }: UnitMeshProps) {
-  const { selectUnits, selectedUnitIds } = useGameStore();
+  const { selectUnits, selectedUnitIds, attackingUnitIds } = useGameStore();
   const [hovered, setHovered] = useState(false);
-  const isSelected = selectedUnitIds.includes(unit.id);
+  const isSelected  = selectedUnitIds.includes(unit.id);
+  const isAttacking = attackingUnitIds.has(unit.id);
   const color = `#${unit.type.color.toString(16).padStart(6, '0')}`;
 
   return (
@@ -104,6 +236,12 @@ export function UnitMesh({ unit }: UnitMeshProps) {
       onPointerOver={e => { e.stopPropagation(); setHovered(true); }}
       onPointerOut={() => setHovered(false)}
     >
+      {/* 클릭 범위 확장용 투명 박스 — 📌 수정 포인트: args=[가로, 높이, 깊이] */}
+      <mesh position={[0, 1.5, 0]}>
+        <boxGeometry args={[3, 4, 3]} />
+        <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+      </mesh>
+
       <mesh rotation={[-Math.PI/2,0,0]} position={[0,0.01,0]} scale={[1,0.6,1]}>
         <circleGeometry args={[0.5,16]} />
         <meshBasicMaterial color="#000000" transparent opacity={0.25} />
@@ -139,12 +277,12 @@ export function UnitMesh({ unit }: UnitMeshProps) {
         </mesh>
       )}
 
-      <UnitModel unit={unit} isSelected={isSelected} hovered={hovered} />
+      <UnitModel unit={unit} isSelected={isSelected} hovered={hovered} isAttacking={isAttacking} />
 
       <Html position={[0, 2.2, 0]} center distanceFactor={10}>
         <div style={{ width:'80px', pointerEvents:'none' }}>
           <div style={{
-            textAlign: 'center', color: '#ffffff', fontSize: '11px', fontWeight: 'bold',
+            textAlign: 'center', color: '#ffffff', fontSize: '30px', fontWeight: 'bold',
             fontFamily: '"Dotum", "굴림", sans-serif',
             textShadow: '0 0 4px #000, 0 0 4px #000', marginBottom: '3px', whiteSpace: 'nowrap',
           }}>
