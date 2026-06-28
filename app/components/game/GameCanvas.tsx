@@ -11,7 +11,9 @@ import { StoryZoneObjects } from './StoryZone';
 import { useGameLoop } from './GameLoop';
 import { useGameStore } from '../../store/useGameStore';
 // GLB 모델 미리 로딩 (소환 시 깜빡임 방지)
+
 useGLTF.preload('/models/default.glb');
+useGLTF.preload('/models/subin.glb');
 
 const GROUND_PLANE = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 
@@ -36,10 +38,12 @@ function SceneInner({
   cameraRef,
   glRef,
   orbitRef,
+  onEnemySelectRef,
 }: {
   cameraRef: React.MutableRefObject<THREE.Camera | null>;
   glRef: React.MutableRefObject<THREE.WebGLRenderer | null>;
   orbitRef: React.MutableRefObject<any>;
+  onEnemySelectRef: React.MutableRefObject<((id: string) => void) | null>;
 }) {
   const { camera, gl } = useThree();
   const { units, enemies } = useGameStore();
@@ -76,7 +80,7 @@ function SceneInner({
       <GameMap />
 
       {units.map(unit => <UnitMesh key={unit.id} unit={unit} />)}
-      {enemies.map(enemy => <EnemyMesh key={enemy.id} enemy={enemy} />)}
+      {enemies.map(enemy => <EnemyMesh key={enemy.id} enemy={enemy} onSelect={(id) => onEnemySelectRef.current?.(id)} />)}
 
       <StoryZoneObjects />
 
@@ -106,9 +110,11 @@ function SceneInner({
 export function GameCanvas({
   cameraRef: externalCameraRef,
   orbitRef: externalOrbitRef,
+  onEnemySelectRef: externalOnEnemySelectRef,
 }: {
   cameraRef?: React.MutableRefObject<THREE.Camera | null>;
   orbitRef?: React.MutableRefObject<any>;
+  onEnemySelectRef?: React.MutableRefObject<((id: string) => void) | null>;
 }) {
   const { units, selectedUnitIds, selectUnits, clearSelection, moveSelectedUnits, gatherSameType } = useGameStore();
 
@@ -138,6 +144,8 @@ export function GameCanvas({
   }, [gatherSameType]);
   const internalCameraRef = useRef<THREE.Camera | null>(null);
   const cameraRef = externalCameraRef ?? internalCameraRef;
+  const internalOnEnemySelectRef = useRef<((id: string) => void) | null>(null);
+  const onEnemySelectRef = externalOnEnemySelectRef ?? internalOnEnemySelectRef;
   const glRef = useRef<THREE.WebGLRenderer | null>(null);
   const internalOrbitRef = useRef<any>(null);
   const orbitRef = externalOrbitRef ?? internalOrbitRef;
@@ -329,6 +337,7 @@ export function GameCanvas({
             cameraRef={cameraRef}
             glRef={glRef}
             orbitRef={orbitRef}
+            onEnemySelectRef={onEnemySelectRef}
           />
         </Suspense>
       </Canvas>

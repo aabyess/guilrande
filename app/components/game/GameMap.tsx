@@ -6,7 +6,7 @@ import { PATH_POINTS } from '../../game/path/EnemyPath';
 
 // 맵 전체 크기
 const MAP_W = 120;
-const MAP_H = 120;
+const MAP_H = 200;
 
 function createGrassTexture(seed = 0) {
   const canvas = document.createElement('canvas');
@@ -281,39 +281,39 @@ export function GameMap() {
 
 
       {/* ── 스토리존 섬 (P3 섬 아래 별도 구역, z=80 중심) ── */}
-      <mesh rotation={[-Math.PI/2,0,0]} position={[0,-0.05,100]} receiveShadow>
+      <mesh rotation={[-Math.PI/2,0,0]} position={[0,-0.05,140]} receiveShadow>
         <planeGeometry args={[60, 40]} />
         <meshStandardMaterial color="#1a3a18" roughness={0.95} />
       </mesh>
-      <mesh rotation={[-Math.PI/2,0,0]} position={[0,0,100]} receiveShadow>
+      <mesh rotation={[-Math.PI/2,0,0]} position={[0,0,140]} receiveShadow>
         <planeGeometry args={[44, 30]} />
         <meshStandardMaterial color="#162e12" roughness={1} />
       </mesh>
-      <gridHelper args={[44, 22, '#1e3a1a', '#1e3a1a']} position={[0,0.02,100]} />
+      <gridHelper args={[44, 22, '#1e3a1a', '#1e3a1a']} position={[0,0.02,140]} />
       {/* 담장 */}
-      <mesh position={[0, 0.4, 85]} castShadow receiveShadow>
+      <mesh position={[0, 0.4, 125]} castShadow receiveShadow>
         <boxGeometry args={[45, 0.8, 0.6]} />
         <meshStandardMaterial color="#3a2a1a" roughness={1} />
       </mesh>
-      <mesh position={[0, 0.4, 115]} castShadow receiveShadow>
+      <mesh position={[0, 0.4, 155]} castShadow receiveShadow>
         <boxGeometry args={[45, 0.8, 0.6]} />
         <meshStandardMaterial color="#3a2a1a" roughness={1} />
       </mesh>
-      <mesh position={[-22, 0.4, 100]} castShadow receiveShadow>
+      <mesh position={[-22, 0.4, 140]} castShadow receiveShadow>
         <boxGeometry args={[0.6, 0.8, 31]} />
         <meshStandardMaterial color="#3a2a1a" roughness={1} />
       </mesh>
-      <mesh position={[22, 0.4, 100]} castShadow receiveShadow>
+      <mesh position={[22, 0.4, 140]} castShadow receiveShadow>
         <boxGeometry args={[0.6, 0.8, 31]} />
         <meshStandardMaterial color="#3a2a1a" roughness={1} />
       </mesh>
       {/* 입구 횃불 */}
-      <group position={[-6, 0, 85]}>
+      <group position={[-6, 0, 125]}>
         <mesh position={[0,0.85,0]}><cylinderGeometry args={[0.07,0.07,1.6,6]} /><meshStandardMaterial color="#4a3828" /></mesh>
         <mesh position={[0,1.7,0]}><sphereGeometry args={[0.2,8,8]} /><meshStandardMaterial color="#ff6600" emissive="#ff4400" emissiveIntensity={2.5} transparent opacity={0.9} /></mesh>
         <pointLight position={[0,1.8,0]} color="#ff8800" intensity={5} distance={10} decay={2} />
       </group>
-      <group position={[6, 0, 85]}>
+      <group position={[6, 0, 125]}>
         <mesh position={[0,0.85,0]}><cylinderGeometry args={[0.07,0.07,1.6,6]} /><meshStandardMaterial color="#4a3828" /></mesh>
         <mesh position={[0,1.7,0]}><sphereGeometry args={[0.2,8,8]} /><meshStandardMaterial color="#ff6600" emissive="#ff4400" emissiveIntensity={2.5} transparent opacity={0.9} /></mesh>
         <pointLight position={[0,1.8,0]} color="#ff8800" intensity={5} distance={10} decay={2} />

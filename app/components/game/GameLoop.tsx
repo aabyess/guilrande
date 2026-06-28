@@ -4,12 +4,12 @@ import { useEffect, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { useGameStore } from '../../store/useGameStore';
 import { getPathPosition } from '../../game/path/EnemyPath';
-import * as THREE from 'three';
 
 const ENEMIES_PER_ROUND = 40;
-const ROUND_DURATION = 60;
+const ROUND_DURATION = 40;
+const SPAWN_WINDOW = 30; // 스폰은 처음 30초 안에만
 const MAX_ENEMIES = 100;
-const BOSS_ROUND = 5; // 5라운드마다 보스
+const BOSS_ROUNDS = new Set([10, 20, 30, 40, 50, 60]);
 
 function calcDamage(damage: number, attackType: string, armor: number, magicResist: number) {
   if (attackType === 'physical') return Math.max(1, damage - armor);
@@ -17,168 +17,152 @@ function calcDamage(damage: number, attackType: string, armor: number, magicResi
 }
 
 export function useGameLoop() {
-  const store = useGameStore();
-  const spawnCountRef = useRef(0);
-  const lastSpawnRef = useRef(0);
-  const roundTickRef = useRef(0);
-  const lastTickRef = useRef(0);
-  const prepareTickRef = useRef(0);
-  const lastPrepareRef = useRef(0);
+  const spawnCountRef  = useRef(0);
+  const lastSpawnRef   = useRef(0);
+  const roundTickRef   = useRef(0);
+  const lastTickRef    = useRef(0);
   const prepareTimeRef = useRef(10);
-  const countdownRef = useRef(0);
-  const isCountingRef = useRef(false);
+  const lastPrepareRef = useRef(0);
+  const countdownRef   = useRef(0);
+  const isCountingRef  = useRef(false);
 
-  // 라운드 리셋
   const startRound = () => {
     spawnCountRef.current = 0;
-    lastSpawnRef.current = 0;
-    roundTickRef.current = 0;
-    lastTickRef.current = 0;
-    store.setRoundTime(ROUND_DURATION);
+    lastSpawnRef.current  = 0;
+    roundTickRef.current  = 0;
+    lastTickRef.current   = 0;
+    useGameStore.getState().setRoundTime(ROUND_DURATION);
   };
 
   useEffect(() => {
-    startRound();
-  }, [store.round]);
+    const unsub = useGameStore.subscribe(
+      (s, prev) => { if (s.round !== prev.round) startRound(); }
+    );
+    return unsub;
+  }, []);
 
   useFrame((_, delta) => {
-    const {
-      phase, round, gameOver, enemies, units,
-      setPhase, setRound, setRollCount, rollCount,
-      spawnEnemy, spawnBoss, removeEnemy, updateEnemyT,
-      damageEnemy, updateUnitLastFired, updateUnitSkill,
-      roundTime, setRoundTime, setGameOver, setPrepareTime, prepareTime,
-    } = useGameStore.getState();
-
-    if (gameOver) return;
+    const s = useGameStore.getState();
+    if (s.gameOver) return;
 
     const now = performance.now();
 
-    // ── 준비 페이즈 카운트다운 ──────────────────────────
-    if (phase === 'prepare') {
+    // ── 준비 페이즈 ───────────────────────────────────
+    if (s.phase === 'prepare') {
       if (now - lastPrepareRef.current >= 1000) {
         lastPrepareRef.current = now;
         const next = prepareTimeRef.current - 1;
         prepareTimeRef.current = next;
-        setPrepareTime(next);
+        s.setPrepareTime(next);
         if (next <= 0) {
           prepareTimeRef.current = 10;
-          setPrepareTime(10);
-          setPhase('battle');
+          s.setPrepareTime(10);
+          s.setPhase('battle');
           startRound();
         }
       }
       return;
     }
 
-    // ── 배틀 페이즈 ────────────────────────────────────
-
-    // 라운드 타이머
+    // ── 라운드 타이머 ─────────────────────────────────
     if (now - lastTickRef.current >= 1000) {
       lastTickRef.current = now;
       roundTickRef.current++;
       const remaining = ROUND_DURATION - roundTickRef.current;
-      setRoundTime(remaining);
-
+      s.setRoundTime(remaining);
       if (remaining <= 0) {
-        // 라운드 종료
-        setRollCount(rollCount + 2);
-        setRound(round + 1);
+        s.setRollCount(s.rollCount + 2);
+        s.setRound(s.round + 1);
         roundTickRef.current = 0;
       }
     }
 
-    // 적 스폰
-    const spawnInterval = (ROUND_DURATION * 1000) / ENEMIES_PER_ROUND;
-    if (
-      spawnCountRef.current < ENEMIES_PER_ROUND &&
-      now - lastSpawnRef.current >= spawnInterval
-    ) {
-      lastSpawnRef.current = now;
-      spawnCountRef.current++;
-      spawnEnemy(round);
+    // ── 적 스폰 ───────────────────────────────────────
+    const isBossRound = BOSS_ROUNDS.has(s.round);
+    const spawnInterval = (SPAWN_WINDOW * 1000) / ENEMIES_PER_ROUND; // 30초 안에 40마리
+    const roundElapsed = roundTickRef.current;
 
-      // 보스 (5라운드마다)
-      if (round % BOSS_ROUND === 0 && spawnCountRef.current === 1) {
-        spawnBoss(round);
+    if (isBossRound) {
+      // 보스 라운드: 라운드 시작 직후 보스 1마리만 스폰
+      if (spawnCountRef.current === 0) {
+        spawnCountRef.current = 1;
+        lastSpawnRef.current = now;
+        s.spawnBoss(s.round);
+      }
+    } else {
+      // 일반 라운드: 30초 안에 40마리
+      if (spawnCountRef.current < ENEMIES_PER_ROUND && roundElapsed < SPAWN_WINDOW && now - lastSpawnRef.current >= spawnInterval) {
+        lastSpawnRef.current = now;
+        spawnCountRef.current++;
+        s.spawnEnemy(s.round);
       }
     }
 
-    // 적 이동
-    const currentEnemies = useGameStore.getState().enemies;
-    for (const enemy of currentEnemies) {
-      const newT = (enemy.t + enemy.speed) % 1;
-      updateEnemyT(enemy.id, newT);
-    }
+    // ── 적 이동 — 배치 setState (핵심 최적화) ─────────
+    // 개별 updateEnemyT 대신 enemies 배열 전체를 한 번에 교체
+    useGameStore.setState(cur => ({
+      enemies: cur.enemies.map(e => ({ ...e, t: (e.t + e.speed) % 1 })),
+    }));
 
-    // 게임오버 체크
-    if (currentEnemies.length >= MAX_ENEMIES) {
-      if (!isCountingRef.current) {
-        isCountingRef.current = true;
-        countdownRef.current = 10;
-      }
+    // ── 게임오버 체크 ─────────────────────────────────
+    const enemies = useGameStore.getState().enemies;
+    if (enemies.length >= MAX_ENEMIES) {
+      if (!isCountingRef.current) { isCountingRef.current = true; countdownRef.current = 10; }
       countdownRef.current -= delta;
-      if (countdownRef.current <= 0) {
-        setGameOver(true);
-        return;
-      }
+      if (countdownRef.current <= 0) { s.setGameOver(true); return; }
     } else {
       isCountingRef.current = false;
     }
 
-    // 유닛 부드러운 이동 (lerp)
-    const movingUnits = useGameStore.getState().units;
+    // ── 유닛 이동 (lerp) — 배치 setState ─────────────
     const MOVE_SPEED = 0.08;
-    for (const unit of movingUnits) {
-      if (unit.targetX === undefined || unit.targetZ === undefined) continue;
-      const dx = unit.targetX - unit.x;
-      const dz = unit.targetZ - unit.z;
-      const dist = Math.sqrt(dx*dx + dz*dz);
-      if (dist < 0.05) {
-        useGameStore.setState(s => ({
-          units: s.units.map(u => u.id === unit.id
-            ? { ...u, x: unit.targetX!, z: unit.targetZ!, targetX: undefined, targetZ: undefined }
-            : u)
-        }));
-      } else {
-        const nx = unit.x + dx * MOVE_SPEED;
-        const nz = unit.z + dz * MOVE_SPEED;
-        useGameStore.setState(s => ({
-          units: s.units.map(u => u.id === unit.id ? { ...u, x: nx, z: nz } : u)
-        }));
-      }
+    const units = useGameStore.getState().units;
+    const hasMoving = units.some(u => u.targetX !== undefined);
+    if (hasMoving) {
+      useGameStore.setState(cur => ({
+        units: cur.units.map(u => {
+          if (u.targetX === undefined || u.targetZ === undefined) return u;
+          const dx = u.targetX - u.x;
+          const dz = u.targetZ - u.z;
+          const dist = Math.sqrt(dx * dx + dz * dz);
+          if (dist < 0.05) return { ...u, x: u.targetX, z: u.targetZ, targetX: undefined, targetZ: undefined };
+          return { ...u, x: u.x + dx * MOVE_SPEED, z: u.z + dz * MOVE_SPEED };
+        }),
+      }));
     }
 
-    // 유닛 공격
-    const currentUnits = useGameStore.getState().units;
-    const currentEnemiesForAttack = useGameStore.getState().enemies;
+    // ── 유닛 공격 ─────────────────────────────────────
+    // 데미지/스킬 변경사항을 모아서 한 번에 적용
+    const currentUnits   = useGameStore.getState().units;
+    const currentEnemies = useGameStore.getState().enemies;
+
+    // 적 HP 델타 맵
+    const enemyDmgMap = new Map<string, number>();
+    // 유닛 변경 맵
+    const unitUpdates = new Map<string, { lastFired: number; skillGauge: number }>();
 
     for (const unit of currentUnits) {
       if (now - unit.lastFired < unit.type.fireRate) continue;
 
-      for (const enemy of currentEnemiesForAttack) {
+      for (const enemy of currentEnemies) {
         const ePos = getPathPosition(enemy.t);
-        const dist = Math.sqrt(
-          (unit.x - ePos.x) ** 2 + (unit.z - ePos.z) ** 2
-        );
+        const dist = Math.sqrt((unit.x - ePos.x) ** 2 + (unit.z - ePos.z) ** 2);
 
         if (dist < unit.type.range / 10) {
           const dmg = calcDamage(unit.type.damage, unit.type.attackType, enemy.armor, enemy.magicResist);
-          damageEnemy(enemy.id, dmg);
-          updateUnitLastFired(unit.id, now);
+          enemyDmgMap.set(enemy.id, (enemyDmgMap.get(enemy.id) ?? 0) + dmg);
 
           const newGauge = Math.min(100, unit.skillGauge + 10);
-          updateUnitSkill(unit.id, newGauge);
+          unitUpdates.set(unit.id, { lastFired: now, skillGauge: newGauge });
 
           // 스킬 발동
           if (newGauge >= 100) {
-            updateUnitSkill(unit.id, 0);
-            // 범위 내 적 데미지
-            for (const e of useGameStore.getState().enemies) {
+            unitUpdates.set(unit.id, { lastFired: now, skillGauge: 0 });
+            for (const e of currentEnemies) {
               const ep = getPathPosition(e.t);
               const sd = Math.sqrt((unit.x - ep.x) ** 2 + (unit.z - ep.z) ** 2);
               if (sd < unit.type.range / 6) {
-                damageEnemy(e.id, unit.type.damage * 3);
+                enemyDmgMap.set(e.id, (enemyDmgMap.get(e.id) ?? 0) + unit.type.damage * 3);
               }
             }
           }
@@ -187,10 +171,28 @@ export function useGameLoop() {
       }
     }
 
-    // 죽은 적 제거
-    for (const enemy of useGameStore.getState().enemies) {
-      if (enemy.hp <= 0) removeEnemy(enemy.id);
+    // 적 HP 배치 업데이트 + 죽은 적 제거 — 1번 setState
+    if (enemyDmgMap.size > 0) {
+      useGameStore.setState(cur => ({
+        enemies: cur.enemies
+          .map(e => enemyDmgMap.has(e.id) ? { ...e, hp: e.hp - enemyDmgMap.get(e.id)! } : e)
+          .filter(e => e.hp > 0),
+      }));
+    } else {
+      // 데미지 없어도 hp<=0 제거
+      useGameStore.setState(cur => ({
+        enemies: cur.enemies.filter(e => e.hp > 0),
+      }));
+    }
+
+    // 유닛 상태 배치 업데이트 — 1번 setState
+    if (unitUpdates.size > 0) {
+      useGameStore.setState(cur => ({
+        units: cur.units.map(u => {
+          const upd = unitUpdates.get(u.id);
+          return upd ? { ...u, ...upd } : u;
+        }),
+      }));
     }
   });
-
 }

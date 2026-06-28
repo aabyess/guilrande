@@ -19,14 +19,14 @@ const ENTRY_PORTALS: { pos: [number,number,number]; playerId: number }[] = [
 
 // ── 스토리존 → 플레이어 맵 귀환 포탈 위치 ──────────────────
 const RETURN_PORTALS: { pos: [number,number,number]; arrive: [number,number] }[] = [
-  { pos: [-18, 0, 88], arrive: [-30, -30] },  // → P1 중앙
-  { pos: [ -6, 0, 88], arrive: [ 30, -30] },  // → P2 중앙
-  { pos: [  6, 0, 88], arrive: [-30,  30] },  // → P3 중앙
-  { pos: [ 18, 0, 88], arrive: [ 30,  30] },  // → P4 중앙
+  { pos: [-18, 0, 128], arrive: [-30, -30] },  // → P1 중앙
+  { pos: [ -6, 0, 128], arrive: [ 30, -30] },  // → P2 중앙
+  { pos: [  6, 0, 128], arrive: [-30,  30] },  // → P3 중앙
+  { pos: [ 18, 0, 128], arrive: [ 30,  30] },  // → P4 중앙
 ];
 
 // 스토리존 도착 위치
-const STORY_ARRIVE = { x: 0, z: 94 };
+const STORY_ARRIVE = { x: 0, z: 134 };
 
 // ── 단계별 건물 스타일 ───────────────────────────────────────
 interface StageStyle {

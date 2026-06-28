@@ -19,7 +19,7 @@ export interface EnemyInstance {
   id: string;
   hp: number;
   maxHp: number;
-  t: number;          // 경로상 위치 0~1
+  t: number;
   speed: number;
   armor: number;
   magicResist: number;
@@ -32,7 +32,7 @@ export interface StoryBuilding {
   z: number;
   hp: number;
   maxHp: number;
-  radius: number;       // 공격 사거리
+  radius: number;
   defeated: boolean;
 }
 
@@ -40,31 +40,26 @@ export interface StoryZoneState {
   active: boolean;
   buildings: StoryBuilding[];
   bossSpawned: boolean;
-  currentStage: number;     // 현재 스토리 단계 (1~10)
-  clearedStages: number[];  // 클리어한 단계들
+  currentStage: number;
+  clearedStages: number[];
 }
 
 interface GameState {
-  // 게임 페이즈
   phase: 'prepare' | 'battle';
   round: number;
   roundTime: number;
   prepareTime: number;
   rollCount: number;
+  specialRollCount: number;
   gameOver: boolean;
 
-  // 유닛/적
   units: UnitInstance[];
   enemies: EnemyInstance[];
-
-  // 선택
   selectedUnitIds: string[];
-
-  // 스토리존
   storyZone: StoryZoneState;
 
-  // 액션
   rollUnit: () => void;
+  rollSpecial: () => void;
   placeUnit: (type: UnitType, x: number, z: number) => void;
   moveUnit: (id: string, x: number, z: number) => void;
   moveSelectedUnits: (targetX: number, targetZ: number) => void;
@@ -92,7 +87,6 @@ interface GameState {
 
   executeCombination: (materials: string[]) => void;
 
-  // 스토리존 액션
   enterStoryZone: () => void;
   exitStoryZone: () => void;
   damageBuilding: (id: string, dmg: number) => void;
@@ -110,25 +104,19 @@ export const useGameStore = create<GameState>((set, get) => ({
   roundTime: 60,
   prepareTime: 10,
   rollCount: 5,
+  specialRollCount: 1,
   gameOver: false,
   units: [],
   enemies: [],
   selectedUnitIds: [],
 
-  // 스토리존 초기 상태
   storyZone: {
     active: false,
     bossSpawned: false,
     currentStage: 1,
     clearedStages: [],
     buildings: [
-      {
-        id: 'stage_1',
-        x: 0, z: 100,
-        hp: 800, maxHp: 800,
-        radius: 12,
-        defeated: false,
-      },
+      { id: 'stage_1', x: 0, z: 140, hp: 800, maxHp: 800, radius: 12, defeated: false },
     ],
   },
 
@@ -136,9 +124,19 @@ export const useGameStore = create<GameState>((set, get) => ({
     const { rollCount, placeUnit } = get();
     if (rollCount <= 0) return;
     const type = ROLL_POOL[Math.floor(Math.random() * ROLL_POOL.length)];
-    // 플레이어1 구역 중심 (-30, -30)
     placeUnit(type, -30, -30);
     set(s => ({ rollCount: s.rollCount - 1 }));
+  },
+
+  rollSpecial: () => {
+    const { specialRollCount, placeUnit } = get();
+    if (specialRollCount <= 0) return;
+    // 특별함 = rarity 'rare'
+    const pool = UNIT_TYPES.filter(t => t.rarity === 'rare');
+    if (pool.length === 0) return;
+    const type = pool[Math.floor(Math.random() * pool.length)];
+    placeUnit(type, -30, -30);
+    set({ specialRollCount: 0 });
   },
 
   placeUnit: (type, x, z) => {
@@ -153,9 +151,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   moveUnit: (id, x, z) => {
-    set(s => ({
-      units: s.units.map(u => u.id === id ? { ...u, x, z } : u)
-    }));
+    set(s => ({ units: s.units.map(u => u.id === id ? { ...u, x, z } : u) }));
   },
 
   moveSelectedUnits: (targetX, targetZ) => {
@@ -165,7 +161,6 @@ export const useGameStore = create<GameState>((set, get) => ({
       units: s.units.map(u => {
         const idx = selected.findIndex(t => t.id === u.id);
         if (idx === -1) return u;
-        // 약간씩만 퍼지게 (0.4 간격 — 유닛 크기 0.7보다 작아서 겹침)
         const cols = Math.ceil(Math.sqrt(selected.length));
         const col = idx % cols;
         const row = Math.floor(idx / cols);
@@ -176,7 +171,6 @@ export const useGameStore = create<GameState>((set, get) => ({
     }));
   },
 
-  // V키: 같은 타입 유닛 집결
   gatherSameType: () => {
     const { selectedUnitIds, units } = get();
     if (selectedUnitIds.length === 0) return;
@@ -200,18 +194,15 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   selectUnits: (ids) => set({ selectedUnitIds: ids }),
   clearSelection: () => set({ selectedUnitIds: [] }),
-
-  removeUnit: (id) => {
-    set(s => ({ units: s.units.filter(u => u.id !== id) }));
-  },
+  removeUnit: (id) => set(s => ({ units: s.units.filter(u => u.id !== id) })),
 
   spawnEnemy: (round) => {
     const enemy: EnemyInstance = {
       id: `e${eid++}`,
-      hp: 80 + round * 30,
+      hp: 160 + round * 60,
       maxHp: 80 + round * 30,
       t: 0,
-      speed: 0.00025,
+      speed: 0.0008,
       armor: 5 + round * 2,
       magicResist: 3 + round * 2,
       isBoss: false,
@@ -222,10 +213,10 @@ export const useGameStore = create<GameState>((set, get) => ({
   spawnBoss: (round) => {
     const enemy: EnemyInstance = {
       id: `e${eid++}`,
-      hp: 500 + round * 100,
-      maxHp: 500 + round * 100,
+      hp: 1000 + round * 100,
+      maxHp: 1000 + round * 100,
       t: 0,
-      speed: 0.00012,
+      speed: 0.0005,
       armor: 20 + round * 5,
       magicResist: 15 + round * 5,
       isBoss: true,
@@ -234,29 +225,18 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   damageEnemy: (id, dmg) => {
-    set(s => ({
-      enemies: s.enemies.map(e => e.id === id ? { ...e, hp: e.hp - dmg } : e)
-    }));
+    set(s => ({ enemies: s.enemies.map(e => e.id === id ? { ...e, hp: e.hp - dmg } : e) }));
   },
-
-  removeEnemy: (id) => {
-    set(s => ({ enemies: s.enemies.filter(e => e.id !== id) }));
-  },
-
+  removeEnemy: (id) => set(s => ({ enemies: s.enemies.filter(e => e.id !== id) })),
   updateEnemyT: (id, t) => {
-    set(s => ({
-      enemies: s.enemies.map(e => e.id === id ? { ...e, t } : e)
-    }));
+    set(s => ({ enemies: s.enemies.map(e => e.id === id ? { ...e, t } : e) }));
   },
-
   updateUnitHp: (id, hp) => {
     set(s => ({ units: s.units.map(u => u.id === id ? { ...u, hp } : u) }));
   },
-
   updateUnitSkill: (id, gauge) => {
     set(s => ({ units: s.units.map(u => u.id === id ? { ...u, skillGauge: gauge } : u) }));
   },
-
   updateUnitLastFired: (id, time) => {
     set(s => ({ units: s.units.map(u => u.id === id ? { ...u, lastFired: time } : u) }));
   },
@@ -272,38 +252,25 @@ export const useGameStore = create<GameState>((set, get) => ({
     const { units, removeUnit, placeUnit } = get();
     const needed = [...materials];
     const toRemove: UnitInstance[] = [];
-
     for (const unit of units) {
       const idx = needed.indexOf(unit.type.name);
-      if (idx !== -1) {
-        needed.splice(idx, 1);
-        toRemove.push(unit);
-      }
+      if (idx !== -1) { needed.splice(idx, 1); toRemove.push(unit); }
     }
     if (needed.length > 0) return;
-
     const combo = COMBINATIONS.find(c =>
       JSON.stringify([...c.materials].sort()) === JSON.stringify([...materials].sort())
     );
     if (!combo) return;
-
     const resultType = UNIT_TYPES.find(t => t.name === combo.result);
     if (!resultType) return;
-
     const spawnX = toRemove[0].x;
     const spawnZ = toRemove[0].z;
     toRemove.forEach(u => removeUnit(u.id));
     placeUnit(resultType, spawnX, spawnZ);
   },
 
-  // ── 스토리존 액션 ──
-  enterStoryZone: () => {
-    set(s => ({ storyZone: { ...s.storyZone, active: true } }));
-  },
-
-  exitStoryZone: () => {
-    set(s => ({ storyZone: { ...s.storyZone, active: false } }));
-  },
+  enterStoryZone: () => set(s => ({ storyZone: { ...s.storyZone, active: true } })),
+  exitStoryZone: () => set(s => ({ storyZone: { ...s.storyZone, active: false } })),
 
   damageBuilding: (id, dmg) => {
     set(s => ({
@@ -318,9 +285,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     }));
   },
 
-  setBossSpawned: (v) => {
-    set(s => ({ storyZone: { ...s.storyZone, bossSpawned: v } }));
-  },
+  setBossSpawned: (v) => set(s => ({ storyZone: { ...s.storyZone, bossSpawned: v } })),
 
   advanceStoryStage: () => {
     const { storyZone } = get();
@@ -333,13 +298,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         currentStage: nextStage,
         clearedStages,
         bossSpawned: false,
-        buildings: [{
-          id: `stage_${nextStage}`,
-          x: 0, z: 100,
-          hp, maxHp: hp,
-          radius: 12 + nextStage,
-          defeated: false,
-        }],
+        buildings: [{ id: `stage_${nextStage}`, x: 0, z: 140, hp, maxHp: hp, radius: 12 + nextStage, defeated: false }],
       },
     }));
   },
@@ -351,19 +310,12 @@ export const useGameStore = create<GameState>((set, get) => ({
         ...s.storyZone,
         currentStage: stage,
         bossSpawned: false,
-        buildings: [{
-          id: `stage_${stage}`,
-          x: 0, z: 100,
-          hp, maxHp: hp,
-          radius: 12 + stage,
-          defeated: false,
-        }],
+        buildings: [{ id: `stage_${stage}`, x: 0, z: 140, hp, maxHp: hp, radius: 12 + stage, defeated: false }],
       },
     }));
   },
 }));
 
-// 단계별 HP 계산
 function getStageHp(stage: number): number {
   const hpTable: Record<number, number> = {
     1: 800, 2: 1200, 3: 1800,

@@ -1,13 +1,113 @@
 'use client';
 
-import { useRef } from 'react';
+import { useRef, useState, useEffect, useCallback } from 'react';
 import * as THREE from 'three';
 import { GameCanvas } from './components/game/GameCanvas';
 import { BottomUI, TopHUD } from './components/ui/BottomUI';
+import { useGameStore } from './store/useGameStore';
+
+const WC_BORDER2 = '#8a7030';
+const WC_BG      = '#0d0a04';
+
+function EscMenu({ onClose }: { onClose: () => void }) {
+  const { phase, setPhase, gameOver } = useGameStore();
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 100,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      backgroundColor: 'rgba(0,0,0,0.75)',
+    }}>
+      <div style={{
+        backgroundColor: WC_BG,
+        border: `3px solid ${WC_BORDER2}`,
+        outline: '1px solid #5a4a1a',
+        boxShadow: '0 0 40px rgba(0,0,0,0.9)',
+        padding: '32px 48px',
+        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px',
+        fontFamily: '"Dotum", "굴림", sans-serif',
+        minWidth: '240px',
+      }}>
+        {/* 타이틀 */}
+        <div style={{
+          color: '#ffd060', fontSize: '22px', fontWeight: 'bold',
+          textShadow: '0 0 10px #aa7700',
+          borderBottom: `1px solid ${WC_BORDER2}`,
+          width: '100%', textAlign: 'center', paddingBottom: '12px', marginBottom: '4px',
+        }}>
+          ⚔ GuilRanDe
+        </div>
+
+        {/* 게임 계속 */}
+        <MenuBtn color="#44aaff" onClick={onClose}>▶ 게임 계속</MenuBtn>
+
+        {/* 전투 시작/정지 */}
+        {!gameOver && (
+          phase === 'prepare' ? (
+            <MenuBtn color="#ff8844" onClick={() => { setPhase('battle'); onClose(); }}>
+              ⚔ 전투 시작
+            </MenuBtn>
+          ) : (
+            <MenuBtn color="#ffcc44" onClick={() => { setPhase('prepare'); onClose(); }}>
+              ⏸ 전투 정지
+            </MenuBtn>
+          )
+        )}
+
+        {/* 처음부터 */}
+        <MenuBtn color="#ff4444" onClick={() => { window.location.reload(); }}>
+          🔄 처음부터
+        </MenuBtn>
+      </div>
+    </div>
+  );
+}
+
+function MenuBtn({ children, onClick, color }: {
+  children: React.ReactNode;
+  onClick: () => void;
+  color: string;
+}) {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <button
+      onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        width: '100%', padding: '10px 0',
+        background: hovered
+          ? `linear-gradient(to bottom, #2a2008, #1a1204)`
+          : `linear-gradient(to bottom, #1a1508, #0e0c04)`,
+        border: `2px solid ${hovered ? color : '#3a3010'}`,
+        outline: `1px solid ${hovered ? '#4a3810' : '#1a1a10'}`,
+        color: hovered ? color : '#aa9060',
+        fontSize: '14px', fontWeight: 'bold',
+        fontFamily: '"Dotum", "굴림", sans-serif',
+        cursor: 'pointer',
+        transition: 'all 0.1s',
+        boxShadow: hovered ? `0 0 8px ${color}44` : 'none',
+      }}
+    >
+      {children}
+    </button>
+  );
+}
 
 export default function Home() {
   const cameraRef = useRef<THREE.Camera | null>(null);
   const orbitRef = useRef<any>(null);
+  const onEnemySelectRef = useRef<((id: string) => void) | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    if (e.key === 'Escape') setMenuOpen(prev => !prev);
+  }, []);
+
+  useEffect(() => {
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleKeyDown]);
 
   return (
     <main style={{
@@ -15,9 +115,11 @@ export default function Home() {
       position: 'relative',
       backgroundColor: '#0a1520', overflow: 'hidden',
     }}>
-      <GameCanvas cameraRef={cameraRef} orbitRef={orbitRef} />
+      <GameCanvas cameraRef={cameraRef} orbitRef={orbitRef} onEnemySelectRef={onEnemySelectRef} />
       <TopHUD />
-      <BottomUI cameraRef={cameraRef} orbitRef={orbitRef} />
+      <BottomUI cameraRef={cameraRef} orbitRef={orbitRef} onEnemySelectRef={onEnemySelectRef} />
+
+      {menuOpen && <EscMenu onClose={() => setMenuOpen(false)} />}
     </main>
   );
 }
