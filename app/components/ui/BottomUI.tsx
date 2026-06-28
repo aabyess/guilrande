@@ -490,7 +490,49 @@ export function BottomUI({
               </div>
             </div>
           );
-        })() : (
+        })() : selectedEnemy ? (
+          <>
+            {/* 적 초상화 */}
+            <div style={{
+              width: '120px', flexShrink: 0,
+              background: selectedEnemy.isBoss ? 'linear-gradient(to bottom, #2a0000, #000)' : 'linear-gradient(to bottom, #1a0800, #000)',
+              border: `2px solid ${selectedEnemy.isBoss ? '#ff2222' : '#cc4400'}`,
+              display: 'flex', flexDirection: 'column',
+              alignItems: 'center', justifyContent: 'center',
+              borderTop: 'none', borderLeft: 'none', borderBottom: 'none', position: 'relative',
+            }}>
+              <div style={{ fontSize: '56px', lineHeight: 1 }}>{selectedEnemy.isBoss ? '👹' : '💀'}</div>
+              <div style={{
+                position: 'absolute', bottom: 0, left: 0, right: 0,
+                borderTop: `1px solid ${selectedEnemy.isBoss ? '#ff2222' : '#cc4400'}`,
+                color: selectedEnemy.isBoss ? '#ff6666' : '#ff9944',
+                fontSize: '11px', fontWeight: 'bold', textAlign: 'center', padding: '3px 0',
+                background: selectedEnemy.isBoss ? 'linear-gradient(to bottom, transparent, #2a0000)' : 'linear-gradient(to bottom, transparent, #1a0800)',
+              }}>{selectedEnemy.isBoss ? '보스' : '적 유닛'}</div>
+            </div>
+            {/* 적 스탯 */}
+            <div style={{ flex: 1, padding: '12px 16px', display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: '8px' }}>
+              <div style={{ color: selectedEnemy.isBoss ? '#ff4444' : '#ff9944', fontSize: '15px', fontWeight: 'bold', borderBottom: `1px solid ${WC_BORDER}`, paddingBottom: '6px' }}>
+                {selectedEnemy.name ?? (selectedEnemy.isBoss ? '보스' : '적 유닛')}
+              </div>
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '3px' }}>
+                  <span style={{ color: '#ff6b6b', fontSize: '12px' }}>❤ HP</span>
+                  <span style={{ color: '#ccc', fontSize: '12px' }}>{Math.round(selectedEnemy.hp)} / {selectedEnemy.maxHp}</span>
+                </div>
+                <div style={{ height: '10px', background: '#1a0000', border: '1px solid #3a0808' }}>
+                  <div style={{ width: `${Math.max(0,(selectedEnemy.hp/selectedEnemy.maxHp)*100)}%`, height: '100%', background: selectedEnemy.isBoss ? 'linear-gradient(to right,#660000,#cc0000)' : 'linear-gradient(to right,#8b0000,#c0392b)', transition: 'width 0.1s' }} />
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+                <span style={{ color: '#aaa', fontSize: '12px' }}>🛡 방어 <span style={{ color: '#fff' }}>{selectedEnemy.armor}</span></span>
+                <span style={{ color: '#aaa', fontSize: '12px' }}>🔮 마저 <span style={{ color: '#fff' }}>{selectedEnemy.magicResist}</span></span>
+                <span style={{ color: '#aaa', fontSize: '12px' }}>💨 속도 <span style={{ color: '#fff' }}>{(selectedEnemy.speed*100000).toFixed(1)}</span></span>
+              </div>
+              <button onClick={() => setSelectedEnemyId(null)} style={{ alignSelf: 'flex-start', background: '#1a1008', border: '1px solid #3a2010', color: '#aa7040', fontSize: '10px', cursor: 'pointer', padding: '2px 8px' }}>✕ 닫기</button>
+            </div>
+          </>
+        ) : (
           <div style={{ color: '#3a3020', fontSize: '14px', margin: 'auto', textAlign: 'center' }}>
             <div style={{ fontSize: '32px', marginBottom: '6px', opacity: 0.4 }}>🖱</div>
             <div style={{ opacity: 0.4 }}>유닛을 클릭하여 선택</div>

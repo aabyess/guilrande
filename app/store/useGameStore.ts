@@ -17,6 +17,7 @@ export interface UnitInstance {
 
 export interface EnemyInstance {
   id: string;
+  name: string;
   hp: number;
   maxHp: number;
   t: number;
@@ -94,6 +95,32 @@ interface GameState {
   advanceStoryStage: () => void;
   setStoryStage: (stage: number) => void;
 }
+
+// ── 라운드별 적 이름 ──────────────────────────────────────────
+const ROUND_ENEMY_NAMES: Record<number, string> = {
+  1:'박진웅', 2:'김갑식', 3:'반항아이승우', 4:'배병욱', 5:'왕승환',
+  6:'이재윤', 7:'인홍진', 8:'문필환', 9:'김민준(안경)',
+  11:'주영호', 12:'김정래', 13:'박예원', 14:'조도연', 15:'이상혁',
+  16:'유재헌', 17:'이하림', 18:'문채홍', 19:'박기찬',
+  21:'박은석', 22:'박도진', 23:'이호준', 24:'구주호', 25:'최준우',
+  26:'이정범', 27:'임채준', 28:'신림초패거리', 29:'송형성',
+  31:'김만경', 32:'장명자', 33:'어철승', 34:'이수은', 35:'장하민',
+  36:'서승혁', 37:'최혜륜', 38:'조성진', 39:'선효진',
+  41:'고어진', 42:'김용태', 43:'엄태웅', 44:'유시은', 45:'양문호',
+  46:'강민호', 47:'이현빈', 48:'노수신', 49:'정다희',
+  51:'진연서', 52:'이현주', 53:'이태훈', 54:'최수지', 55:'임준성',
+  56:'이진수', 57:'지성현', 58:'박병규', 59:'박찬형',
+  60:'서한빈',
+};
+
+const BOSS_NAMES: Record<number, string> = {
+  10: '레벨 보스 — 초등학교 저학년 (박민수)',
+  20: '레벨 보스 — 초등학교 고학년 (박은석)',
+  30: '레벨 보스 — 중학교 저학년 (박민수)',
+  40: '레벨 보스 — 중학교 고학년 (김용태)',
+  50: '레벨 보스 — 고등학교 저학년 (이태훈)',
+  60: '레벨 보스 — 고등학교 고학년 (정윤식)',
+};
 
 let eid = 0;
 let uid = 0;
@@ -197,10 +224,12 @@ export const useGameStore = create<GameState>((set, get) => ({
   removeUnit: (id) => set(s => ({ units: s.units.filter(u => u.id !== id) })),
 
   spawnEnemy: (round) => {
+    const name = ROUND_ENEMY_NAMES[round] ?? `적 ${round}라운드`;
     const enemy: EnemyInstance = {
       id: `e${eid++}`,
+      name,
       hp: 160 + round * 60,
-      maxHp: 80 + round * 30,
+      maxHp: 160 + round * 60,
       t: 0,
       speed: 0.0008,
       armor: 5 + round * 2,
@@ -211,10 +240,12 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   spawnBoss: (round) => {
+    const name = BOSS_NAMES[round] ?? `레벨 보스 ${round}라운드`;
     const enemy: EnemyInstance = {
       id: `e${eid++}`,
-      hp: 1000 + round * 100,
-      maxHp: 1000 + round * 100,
+      name,
+      hp: 1000 + round * 200,
+      maxHp: 1000 + round * 200,
       t: 0,
       speed: 0.0005,
       armor: 20 + round * 5,
