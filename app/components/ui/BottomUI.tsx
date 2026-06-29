@@ -60,14 +60,7 @@ function MiniMap({
     ctrl.update();
   }, [cameraRef, orbitRef, toWorld]);
 
-  const pathPts = useCallback(() => {
-    const pts = [];
-    for (let i = 0; i <= 60; i++) {
-      const v = getPathPosition(i / 60);
-      pts.push(toMini(v.x, v.z));
-    }
-    return pts;
-  }, [toMini]);
+  // pathPts 제거 (4존 경로는 draw 함수 내에서 직접 계산)
 
   useEffect(() => {
     const draw = () => {
@@ -77,7 +70,7 @@ function MiniMap({
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
 
-      const { units, enemies } = useGameStore.getState();
+      const { units, enemies, otherPlayersUnits } = useGameStore.getState();
 
       ctx.clearRect(0, 0, PX, PY);
       ctx.fillStyle = '#0e1a08';
@@ -109,17 +102,24 @@ function MiniMap({
       ctx.fillStyle = '#aa44ff';
       ctx.beginPath(); ctx.arc(sc.x, sc.y, 3, 0, Math.PI * 2); ctx.fill();
 
-      // 경로
-      const pp = pathPts();
-      if (pp.length > 1) {
-        ctx.beginPath();
-        ctx.moveTo(pp[0].x, pp[0].y);
-        pp.forEach(p => ctx.lineTo(p.x, p.y));
-        ctx.strokeStyle = '#8a6a30';
-        ctx.lineWidth = 3;
-        ctx.lineJoin = 'round';
-        ctx.stroke();
-      }
+      // ✅ 4개 존 경로 전부 그리기
+      const ZONE_OFFSETS: [number, number][] = [[0,0],[60,0],[0,60],[60,60]];
+      ZONE_OFFSETS.forEach(([ox, oz]) => {
+        const pp: { x: number; y: number }[] = [];
+        for (let i = 0; i <= 60; i++) {
+          const v = getPathPosition(i / 60, 0); // base path
+          pp.push(toMini(v.x + ox, v.z + oz));
+        }
+        if (pp.length > 1) {
+          ctx.beginPath();
+          ctx.moveTo(pp[0].x, pp[0].y);
+          pp.forEach(p => ctx.lineTo(p.x, p.y));
+          ctx.strokeStyle = '#8a6a30';
+          ctx.lineWidth = 3;
+          ctx.lineJoin = 'round';
+          ctx.stroke();
+        }
+      });
 
       // 카메라 뷰 사각형
       const cam = cameraRef.current as THREE.PerspectiveCamera | null;
@@ -141,7 +141,7 @@ function MiniMap({
         ctx.fillRect(tl.x, tl.y, Math.max(br.x - tl.x, 2), Math.max(br.y - tl.y, 2));
       }
 
-      // 유닛
+      // ✅ 내 유닛 (파란색)
       units.forEach(u => {
         const p = toMini(u.x, u.z);
         ctx.beginPath(); ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
@@ -149,9 +149,21 @@ function MiniMap({
         ctx.strokeStyle = '#fff'; ctx.lineWidth = 0.6; ctx.stroke();
       });
 
-      // 적
+      // ✅ 다른 플레이어 유닛 (존별 색상)
+      const PLAYER_COLORS = ['#44aaff','#ff8844','#44ff88','#ff44aa'];
+      otherPlayersUnits.forEach(player => {
+        const color = PLAYER_COLORS[player.zoneIndex] ?? '#ffffff';
+        player.units.forEach(u => {
+          const p = toMini(u.x, u.z);
+          ctx.beginPath(); ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
+          ctx.fillStyle = color; ctx.fill();
+          ctx.strokeStyle = '#fff'; ctx.lineWidth = 0.6; ctx.stroke();
+        });
+      });
+
+      // ✅ 적 — 각 존의 올바른 경로 위치에 표시
       enemies.forEach(e => {
-        const v = getPathPosition(e.t);
+        const v = getPathPosition(e.t, e.zoneIndex ?? 0);
         const p = toMini(v.x, v.z);
         const r = e.isBoss ? 5 : 3;
         ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
@@ -179,7 +191,20 @@ function MiniMap({
 
 // ─── TopHUD ───────────────────────────────────────────────────
 export function TopHUD() {
-  const { phase, round, roundTime, rollCount, gameOver, enemies } = useGameStore();
+  const { phase, round, roundTime, rollCount, gameOver, enemies, zoneIndex, units, otherPlayersUnits } = useGameStore();
+  const myEnemies = enemies.filter(e => (e.zoneIndex ?? 0) === zoneIndex);
+
+  const PLAYER_COLORS = ['#44aaff', '#ff8844', '#44ff88', '#ff44aa'];
+
+  const scoreRows = [0, 1, 2, 3].map(zi => {
+    const isMe = zi === zoneIndex;
+    const unitCount = isMe
+      ? units.length
+      : (otherPlayersUnits.find(p => p.zoneIndex === zi)?.units.length ?? null);
+    const enemyCount = enemies.filter(e => (e.zoneIndex ?? 0) === zi).length;
+    const active = isMe || otherPlayersUnits.some(p => p.zoneIndex === zi);
+    return { zi, isMe, unitCount, enemyCount, active };
+  }).filter(r => r.active);
 
   return (
     <div style={{
@@ -211,7 +236,7 @@ export function TopHUD() {
         {[
           { label: '라운드', value: String(round), color: '#74B9FF' },
           { label: phase === 'prepare' ? '준비' : '전투', value: phase === 'prepare' ? '준비 중' : `${roundTime}초`, color: '#FFD700' },
-          { label: '적',     value: `${enemies.length} / 100`, color: '#FF6B6B' },
+          { label: '적',     value: `${myEnemies.length} / 100`, color: '#FF6B6B' },
           { label: '소환권', value: `${rollCount}회`, color: '#00ff88' },
         ].map(item => (
           <div key={item.label} style={{
@@ -224,6 +249,58 @@ export function TopHUD() {
           </div>
         ))}
       </div>
+      {/* 점수판 */}
+      {scoreRows.length > 0 && (
+        <div style={{
+          marginTop: '4px',
+          backgroundColor: 'rgba(8,6,2,0.92)',
+          border: `2px solid ${WC_BORDER2}`,
+          outline: `1px solid ${WC_BORDER}`,
+          minWidth: '160px',
+          overflow: 'hidden',
+        }}>
+          {/* 헤더 */}
+          <div style={{
+            display: 'flex', alignItems: 'center',
+            background: 'linear-gradient(to bottom, #2a1a08, #120e04)',
+            borderBottom: `1px solid ${WC_BORDER2}`,
+            padding: '2px 8px', gap: '4px',
+          }}>
+            <span style={{ color: '#ffd060', fontSize: '11px', fontWeight: 'bold', flex: 1 }}>플레이어</span>
+            <span style={{ color: '#74B9FF', fontSize: '10px', width: '30px', textAlign: 'center' }}>유닛</span>
+            <span style={{ color: '#FF6B6B', fontSize: '10px', width: '30px', textAlign: 'center' }}>적</span>
+          </div>
+          {scoreRows.map(({ zi, isMe, unitCount, enemyCount }) => (
+            <div key={zi} style={{
+              display: 'flex', alignItems: 'center', gap: '6px',
+              padding: '3px 8px',
+              borderBottom: '1px solid #1a1508',
+              backgroundColor: isMe ? 'rgba(99,102,241,0.15)' : 'transparent',
+            }}>
+              <div style={{
+                width: '8px', height: '8px', borderRadius: '50%',
+                backgroundColor: PLAYER_COLORS[zi], flexShrink: 0,
+              }} />
+              <span style={{
+                color: isMe ? '#fff' : '#aa9060', fontSize: '11px', flex: 1,
+                fontWeight: isMe ? 'bold' : 'normal',
+              }}>
+                P{zi + 1}{isMe ? ' ★' : ''}
+              </span>
+              <span style={{ color: '#74B9FF', fontSize: '11px', fontWeight: 'bold', width: '30px', textAlign: 'center' }}>
+                {unitCount ?? '-'}
+              </span>
+              <span style={{
+                color: enemyCount > 80 ? '#ff2222' : enemyCount > 50 ? '#ff8800' : '#FF6B6B',
+                fontSize: '11px', fontWeight: 'bold', width: '30px', textAlign: 'center',
+              }}>
+                {enemyCount}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
       {gameOver && (
         <div style={{
           marginTop: '6px',
@@ -361,19 +438,6 @@ export function BottomUI({
             </button>
           )}
 
-          {/* 전투 시작 */}
-          {phase === 'prepare' && (
-            <button
-              onClick={() => setPhase('battle')}
-              style={{
-                ...wcBtn(true, '#ff8844'),
-                flex: 1, width: 'auto', height: '28px',
-                fontSize: '12px', fontWeight: 'bold',
-              }}
-            >
-              ▶ 전투
-            </button>
-          )}
         </div>
 
         {/* 미니맵 */}

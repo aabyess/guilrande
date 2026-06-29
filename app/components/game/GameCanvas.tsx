@@ -1,19 +1,27 @@
 'use client';
 
 import { Canvas, useThree, useFrame } from '@react-three/fiber';
-import { OrbitControls, useGLTF } from '@react-three/drei';
+import { OrbitControls, Html } from '@react-three/drei';
 import { Suspense, useRef, useState, useEffect, useCallback } from 'react';
 import * as THREE from 'three';
 import { GameMap } from './GameMap';
-import { UnitMesh } from './UnitMesh';
+import { UnitMesh, GhostUnitMesh } from './UnitMesh';
 import { EnemyMesh } from './EnemyMesh';
 import { StoryZoneObjects } from './StoryZone';
 import { useGameLoop } from './GameLoop';
-import { useGameStore } from '../../store/useGameStore';
+import { useGameStore, OtherPlayerUnit } from '../../store/useGameStore';
 
 // preload 제거: UnitMesh/EnemyMesh에서 lazy 로드로 처리
 
 const GROUND_PLANE = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+
+// 4인 존 중심 좌표 (zoneIndex 0~3)
+const ZONE_CENTERS: [number, number, number][] = [
+  [-30, 0, -30], // P1 좌상단
+  [ 30, 0, -30], // P2 우상단
+  [-30, 0,  30], // P3 좌하단
+  [ 30, 0,  30], // P4 우하단
+];
 
 function getWorldPos(
   clientX: number,
@@ -117,7 +125,7 @@ function SceneInner({
   selectedUnitIds: string[];
 }) {
   const { camera, gl } = useThree();
-  const { units, enemies } = useGameStore();
+  const { units, enemies, otherPlayersUnits } = useGameStore();
 
   useGameLoop();
 
@@ -159,6 +167,13 @@ function SceneInner({
 
       <StoryZoneObjects />
 
+      {/* 다른 플레이어 유닛 (고스트 — 조종 불가) */}
+      {otherPlayersUnits.flatMap(player =>
+        player.units.map(u => (
+          <GhostUnitMesh key={`ghost-${player.playerId}-${u.id}`} unit={u} />
+        ))
+      )}
+
       {/* ─────────────────────────────────────────────
           카메라 줌 컨트롤러 — targetCameraY 변경 시 자동으로 부드럽게 이동
           ───────────────────────────────────────────── */}
@@ -193,16 +208,27 @@ export function GameCanvas({
   cameraRef: externalCameraRef,
   orbitRef: externalOrbitRef,
   onEnemySelectRef: externalOnEnemySelectRef,
+  zoneIndex = 0,
 }: {
   cameraRef?: React.MutableRefObject<THREE.Camera | null>;
   orbitRef?: React.MutableRefObject<any>;
   onEnemySelectRef?: React.MutableRefObject<((id: string) => void) | null>;
+  zoneIndex?: number;
 }) {
-  const { units, selectedUnitIds, selectUnits, clearSelection, moveSelectedUnits, gatherSameType, stopSelectedUnits, setAttackTarget } = useGameStore();
+  const { units, selectedUnitIds, selectUnits, clearSelection, moveSelectedUnits, gatherSameType, stopSelectedUnits, holdSelectedUnits, setAttackTarget } = useGameStore();
 
   const containerRef = useRef<HTMLDivElement>(null);
   const keysRef = useRef<Set<string>>(new Set());
-  const attackModeRef = useRef(false); // A키 누른 상태
+  const attackModeRef = useRef(false);
+
+  // ref 선언 (keydown 핸들러보다 먼저 선언돼야 함)
+  const internalCameraRef = useRef<THREE.Camera | null>(null);
+  const cameraRef = externalCameraRef ?? internalCameraRef;
+  const internalOnEnemySelectRef = useRef<((id: string) => void) | null>(null);
+  const onEnemySelectRef = externalOnEnemySelectRef ?? internalOnEnemySelectRef;
+  const glRef = useRef<THREE.WebGLRenderer | null>(null);
+  const internalOrbitRef = useRef<any>(null);
+  const orbitRef = externalOrbitRef ?? internalOrbitRef;
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -219,6 +245,26 @@ export function GameCanvas({
       if (e.key === 's' || e.key === 'S') {
         stopSelectedUnits();
       }
+      // H키: 홀딩 토글 (그 자리에서 공격만)
+      if (e.key === 'h' || e.key === 'H') {
+        holdSelectedUnits();
+      }
+      // Space: 내 존 중앙으로 카메라 이동
+      if (e.key === ' ') {
+        e.preventDefault();
+        const zoneIdx = useGameStore.getState().zoneIndex;
+        const [zx, , zz] = ZONE_CENTERS[zoneIdx] ?? ZONE_CENTERS[0];
+        const cam = cameraRef.current;
+        const ctrl = orbitRef.current;
+        if (cam && ctrl) {
+          const offX = cam.position.x - ctrl.target.x;
+          const offY = cam.position.y - ctrl.target.y;
+          const offZ = cam.position.z - ctrl.target.z;
+          ctrl.target.set(zx, 0, zz);
+          cam.position.set(zx + offX, offY, zz + offZ);
+          ctrl.update();
+        }
+      }
       if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)) {
         e.preventDefault();
         keysRef.current.add(e.key);
@@ -233,15 +279,8 @@ export function GameCanvas({
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
     };
-  }, [gatherSameType, stopSelectedUnits]);
-
-  const internalCameraRef = useRef<THREE.Camera | null>(null);
-  const cameraRef = externalCameraRef ?? internalCameraRef;
-  const internalOnEnemySelectRef = useRef<((id: string) => void) | null>(null);
-  const onEnemySelectRef = externalOnEnemySelectRef ?? internalOnEnemySelectRef;
-  const glRef = useRef<THREE.WebGLRenderer | null>(null);
-  const internalOrbitRef = useRef<any>(null);
-  const orbitRef = externalOrbitRef ?? internalOrbitRef;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gatherSameType, stopSelectedUnits, holdSelectedUnits]);
 
   const EDGE_THRESHOLD = 60;
   const SCROLL_SPEED = 0.1;
@@ -333,6 +372,7 @@ export function GameCanvas({
     if (cameraRef.current && glRef.current) {
       dragStartWorld.current = getWorldPos(e.clientX, e.clientY, cameraRef.current, glRef.current.domElement);
     }
+    // eslint-disable-next-line react-hooks/immutability
     if (orbitRef.current) orbitRef.current.enabled = false;
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -354,6 +394,7 @@ export function GameCanvas({
   }, []);
 
   const handlePointerUp = useCallback((e: React.PointerEvent) => {
+    // eslint-disable-next-line react-hooks/immutability
     if (orbitRef.current) orbitRef.current.enabled = true;
     setDragBox(null);
     if (!dragStartScreen.current || !cameraRef.current || !glRef.current) {

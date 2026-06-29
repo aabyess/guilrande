@@ -1,13 +1,23 @@
 'use client';
 
 import { useRef, useState, useEffect, useCallback } from 'react';
+import dynamic from 'next/dynamic';
 import * as THREE from 'three';
 import { GameCanvas } from './components/game/GameCanvas';
 import { BottomUI, TopHUD } from './components/ui/BottomUI';
 import { useGameStore } from './store/useGameStore';
 
+const Lobby = dynamic(() => import('./components/ui/Lobby'), { ssr: false });
+
 const WC_BORDER2 = '#8a7030';
 const WC_BG      = '#0d0a04';
+
+interface MultiSession {
+  roomId:    string;
+  nickname:  string;
+  playerId:  string;
+  zoneIndex: number;
+}
 
 function EscMenu({ onClose }: { onClose: () => void }) {
   const { phase, setPhase, gameOver } = useGameStore();
@@ -28,7 +38,6 @@ function EscMenu({ onClose }: { onClose: () => void }) {
         fontFamily: '"Dotum", "굴림", sans-serif',
         minWidth: '240px',
       }}>
-        {/* 타이틀 */}
         <div style={{
           color: '#ffd060', fontSize: '22px', fontWeight: 'bold',
           textShadow: '0 0 10px #aa7700',
@@ -38,10 +47,8 @@ function EscMenu({ onClose }: { onClose: () => void }) {
           ⚔ GuilRanDe
         </div>
 
-        {/* 게임 계속 */}
         <MenuBtn color="#44aaff" onClick={onClose}>▶ 게임 계속</MenuBtn>
 
-        {/* 전투 시작/정지 */}
         {!gameOver && (
           phase === 'prepare' ? (
             <MenuBtn color="#ff8844" onClick={() => { setPhase('battle'); onClose(); }}>
@@ -54,7 +61,6 @@ function EscMenu({ onClose }: { onClose: () => void }) {
           )
         )}
 
-        {/* 처음부터 */}
         <MenuBtn color="#ff4444" onClick={() => { window.location.reload(); }}>
           🔄 처음부터
         </MenuBtn>
@@ -84,8 +90,7 @@ function MenuBtn({ children, onClick, color }: {
         color: hovered ? color : '#aa9060',
         fontSize: '14px', fontWeight: 'bold',
         fontFamily: '"Dotum", "굴림", sans-serif',
-        cursor: 'pointer',
-        transition: 'all 0.1s',
+        cursor: 'pointer', transition: 'all 0.1s',
         boxShadow: hovered ? `0 0 8px ${color}44` : 'none',
       }}
     >
@@ -95,8 +100,9 @@ function MenuBtn({ children, onClick, color }: {
 }
 
 export default function Home() {
+  const [session, setSession] = useState<MultiSession | null>(null);
   const cameraRef = useRef<THREE.Camera | null>(null);
-  const orbitRef = useRef<any>(null);
+  const orbitRef  = useRef<any>(null);
   const onEnemySelectRef = useRef<((id: string) => void) | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -109,6 +115,19 @@ export default function Home() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleKeyDown]);
 
+  const handleGameStart = useCallback((
+    roomId: string, nickname: string, playerId: string, zoneIndex: number
+  ) => {
+    setSession({ roomId, nickname, playerId, zoneIndex });
+    useGameStore.getState().setZoneIndex(zoneIndex); // 존 좌표 store에 저장
+  }, []);
+
+  // ── 로비 ────────────────────────────────────────────────────────────────────
+  if (!session) {
+    return <Lobby onGameStart={handleGameStart} />;
+  }
+
+  // ── 게임 ────────────────────────────────────────────────────────────────────
   return (
     <main style={{
       width: '100vw', height: '100dvh',

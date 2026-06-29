@@ -25,8 +25,13 @@ const RETURN_PORTALS: { pos: [number,number,number]; arrive: [number,number] }[]
   { pos: [ 18, 0, 128], arrive: [ 30,  30] },  // → P4 중앙
 ];
 
-// 스토리존 도착 위치
-const STORY_ARRIVE = { x: 0, z: 134 };
+// 스토리존 도착 위치 — 동서남북 (P1북, P2동, P3남, P4서)
+const STORY_ARRIVE_BY_ZONE: { x: number; z: number }[] = [
+  { x:  0, z: 128 }, // P1 북쪽
+  { x: 18, z: 140 }, // P2 동쪽
+  { x:  0, z: 152 }, // P3 남쪽
+  { x:-18, z: 140 }, // P4 서쪽
+];
 
 // ── 단계별 건물 스타일 ───────────────────────────────────────
 interface StageStyle {
@@ -61,6 +66,9 @@ function EntryPortal({ pos, playerId }: { pos: [number,number,number]; playerId:
     if (portalRef.current) portalRef.current.rotation.y += delta * 1.2;
     if (ringRef.current)   ringRef.current.rotation.z  += delta * 2.0;
 
+    const myZoneIndex = useGameStore.getState().zoneIndex;
+    const arrive = STORY_ARRIVE_BY_ZONE[myZoneIndex] ?? STORY_ARRIVE_BY_ZONE[0];
+
     units.forEach(unit => {
       const dx = unit.x - pos[0], dz = unit.z - pos[2];
       if (Math.sqrt(dx*dx + dz*dz) < PORTAL_RADIUS) {
@@ -68,7 +76,7 @@ function EntryPortal({ pos, playerId }: { pos: [number,number,number]; playerId:
           teleportedRef.current.add(unit.id);
           useGameStore.setState(s => ({
             units: s.units.map(u => u.id === unit.id
-              ? { ...u, x: STORY_ARRIVE.x, z: STORY_ARRIVE.z, targetX: undefined, targetZ: undefined }
+              ? { ...u, x: arrive.x, z: arrive.z, targetX: undefined, targetZ: undefined }
               : u
             )
           }));

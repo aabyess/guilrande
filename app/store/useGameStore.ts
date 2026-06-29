@@ -13,7 +13,8 @@ export interface UnitInstance {
   lastFired: number;
   targetX?: number;
   targetZ?: number;
-  attackTargetId?: string; // A키로 지정한 공격 대상 적 ID
+  attackTargetId?: string;
+  holding?: boolean;        // H키 홀딩 상태
 }
 
 export interface EnemyInstance {
@@ -26,6 +27,7 @@ export interface EnemyInstance {
   armor: number;
   magicResist: number;
   isBoss: boolean;
+  zoneIndex: number;      // 어느 존의 경로를 따라가는지 (0~3)
 }
 
 export interface StoryBuilding {
@@ -62,6 +64,23 @@ export const VISION_PRESETS = {
 } as const;
 export type VisionLevel = keyof typeof VISION_PRESETS;
 
+export interface OtherPlayerUnit {
+  id: string;
+  x: number;
+  z: number;
+  hp: number;
+  maxHp: number;
+  rarity: string;
+  color: number;
+  name: string;
+}
+
+export interface OtherPlayerData {
+  playerId: string;
+  zoneIndex: number;
+  units: OtherPlayerUnit[];
+}
+
 interface GameState {
   phase: 'prepare' | 'battle';
   round: number;
@@ -76,11 +95,17 @@ interface GameState {
   selectedUnitIds: string[];
   storyZone: StoryZoneState;
 
+  // 다른 플레이어 유닛 (렌더링 전용, 조종 불가)
+  otherPlayersUnits: OtherPlayerData[];
+  updateOtherPlayerUnits: (data: OtherPlayerData) => void;
+
   // ─────────────────────────────────────────────
   // 📌 추가된 카메라 시야 상태
   // ─────────────────────────────────────────────
   visionLevel: VisionLevel;
   targetCameraY: number;
+  zoneIndex: number;
+  setZoneIndex: (index: number) => void;
   setCameraVision: (level: VisionLevel) => void;
   setTargetCameraY: (y: number) => void;
 
@@ -95,6 +120,7 @@ interface GameState {
   moveSelectedUnits: (targetX: number, targetZ: number) => void;
   gatherSameType: () => void;
   stopSelectedUnits: () => void;
+  holdSelectedUnits: () => void;  // H키: 그 자리 홀딩 토글
   setAttackTarget: (targetId: string | undefined) => void;
   selectUnits: (ids: string[]) => void;
   clearSelection: () => void;
@@ -155,6 +181,14 @@ const BOSS_NAMES: Record<number, string> = {
 let eid = 0;
 let uid = 0;
 
+// 플레이어 존 중심 좌표 (zoneIndex 0~3)
+const ZONE_CENTERS: [number, number][] = [
+  [-30, -30], // P1 좌상단
+  [ 30, -30], // P2 우상단
+  [-30,  30], // P3 좌하단
+  [ 30,  30], // P4 우하단
+];
+
 export const useGameStore = create<GameState>((set, get) => ({
   phase: 'prepare',
   round: 1,
@@ -172,16 +206,24 @@ export const useGameStore = create<GameState>((set, get) => ({
   // ─────────────────────────────────────────────
   visionLevel: 150,
   targetCameraY: 35,
+  zoneIndex: 0,
   attackingUnitIds: new Set<string>(),
+  otherPlayersUnits: [],
 
   setCameraVision: (level: VisionLevel) => {
     set({ visionLevel: level, targetCameraY: VISION_PRESETS[level] });
   },
 
-  // 마우스 휠 줌 시 현재 Y값으로 직접 동기화
   setTargetCameraY: (y: number) => set({ targetCameraY: y }),
-
+  setZoneIndex: (index: number) => set({ zoneIndex: index }),
   setAttackingUnitIds: (ids: Set<string>) => set({ attackingUnitIds: ids }),
+
+  updateOtherPlayerUnits: (data: OtherPlayerData) => {
+    set(s => {
+      const filtered = s.otherPlayersUnits.filter(p => p.playerId !== data.playerId);
+      return { otherPlayersUnits: [...filtered, data] };
+    });
+  },
 
   storyZone: {
     active: false,
@@ -194,20 +236,22 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   rollUnit: () => {
-    const { rollCount, placeUnit } = get();
+    const { rollCount, placeUnit, zoneIndex } = get();
     if (rollCount <= 0) return;
     const type = ROLL_POOL[Math.floor(Math.random() * ROLL_POOL.length)];
-    placeUnit(type, -30, -30);
+    const [zx, zz] = ZONE_CENTERS[zoneIndex] ?? [-30, -30];
+    placeUnit(type, zx, zz);
     set(s => ({ rollCount: s.rollCount - 1 }));
   },
 
   rollSpecial: () => {
-    const { specialRollCount, placeUnit } = get();
+    const { specialRollCount, placeUnit, zoneIndex } = get();
     if (specialRollCount <= 0) return;
     const pool = UNIT_TYPES.filter(t => t.rarity === 'rare');
     if (pool.length === 0) return;
     const type = pool[Math.floor(Math.random() * pool.length)];
-    placeUnit(type, -30, -30);
+    const [zx, zz] = ZONE_CENTERS[zoneIndex] ?? [-30, -30];
+    placeUnit(type, zx, zz);
     set({ specialRollCount: 0 });
   },
 
@@ -227,8 +271,16 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   moveSelectedUnits: (targetX, targetZ) => {
-    const { selectedUnitIds, units } = get();
+    const { selectedUnitIds, units, zoneIndex } = get();
     const selected = units.filter(u => selectedUnitIds.includes(u.id));
+
+    // 내 존 경계로 목표 좌표 클램프
+    const ZONE_C: [number, number][] = [[-30,-30],[30,-30],[-30,30],[30,30]];
+    const HALF = 20.5;
+    const [zcx, zcz] = ZONE_C[zoneIndex] ?? [-30, -30];
+    const clampedX = Math.max(zcx - HALF, Math.min(zcx + HALF, targetX));
+    const clampedZ = Math.max(zcz - HALF, Math.min(zcz + HALF, targetZ));
+
     set(s => ({
       units: s.units.map(u => {
         const idx = selected.findIndex(t => t.id === u.id);
@@ -238,7 +290,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         const row = Math.floor(idx / cols);
         const ox = (col - Math.floor(cols / 2)) * 0.4;
         const oz = (row - Math.floor(selected.length / cols / 2)) * 0.4;
-        return { ...u, targetX: targetX + ox, targetZ: targetZ + oz };
+        return { ...u, targetX: clampedX + ox, targetZ: clampedZ + oz, holding: false };
       })
     }));
   },
@@ -251,6 +303,24 @@ export const useGameStore = create<GameState>((set, get) => ({
           ? { ...u, targetX: undefined, targetZ: undefined, attackTargetId: undefined }
           : u
       ),
+    }));
+  },
+
+  holdSelectedUnits: () => {
+    const { selectedUnitIds } = get();
+    set(s => ({
+      units: s.units.map(u => {
+        if (!selectedUnitIds.includes(u.id)) return u;
+        const nextHolding = !u.holding;
+        return {
+          ...u,
+          holding: nextHolding,
+          // 홀딩 시 이동 명령 취소
+          targetX: nextHolding ? undefined : u.targetX,
+          targetZ: nextHolding ? undefined : u.targetZ,
+          attackTargetId: nextHolding ? undefined : u.attackTargetId,
+        };
+      }),
     }));
   },
 
@@ -302,6 +372,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       armor: 5 + round * 2,
       magicResist: 3 + round * 2,
       isBoss: false,
+      zoneIndex: 0,
     };
     set(s => ({ enemies: [...s.enemies, enemy] }));
   },
@@ -318,6 +389,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       armor: 20 + round * 5,
       magicResist: 15 + round * 5,
       isBoss: true,
+      zoneIndex: 0,
     };
     set(s => ({ enemies: [...s.enemies, enemy] }));
   },
@@ -347,7 +419,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   setGameOver: (gameOver) => set({ gameOver }),
 
   executeCombination: (materials) => {
-    const { units, removeUnit, placeUnit } = get();
+    const { units, removeUnit, placeUnit, selectedUnitIds } = get();
     const needed = [...materials];
     const toRemove: UnitInstance[] = [];
     for (const unit of units) {
@@ -361,8 +433,12 @@ export const useGameStore = create<GameState>((set, get) => ({
     if (!combo) return;
     const resultType = UNIT_TYPES.find(t => t.name === combo.result);
     if (!resultType) return;
-    const spawnX = toRemove[0].x;
-    const spawnZ = toRemove[0].z;
+
+    // 선택된 유닛 위치 우선 → 없으면 첫 번째 재료 위치
+    const selectedUnit = toRemove.find(u => selectedUnitIds.includes(u.id));
+    const spawnX = (selectedUnit ?? toRemove[0]).x;
+    const spawnZ = (selectedUnit ?? toRemove[0]).z;
+
     toRemove.forEach(u => removeUnit(u.id));
     placeUnit(resultType, spawnX, spawnZ);
   },

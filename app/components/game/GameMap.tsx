@@ -264,12 +264,33 @@ export function GameMap() {
       {/* 4사분면 우하 — 플레이어4 (미래) */}
       <Zone cx={ 30} cz={ 30} size={44} />
 
-      {/* ── 플레이어1 유닛 배치 구역 (2사분면 중앙) ── */}
+      {/* ── 플레이어1 유닛 배치 구역 (좌상단) ── */}
       <mesh rotation={[-Math.PI/2,0,0]} position={[-30,0.01,-30]} receiveShadow>
         <planeGeometry args={[32,32]} />
         <meshStandardMaterial map={zoneTex} roughness={0.8} />
       </mesh>
       <gridHelper args={[32,32,'#3a6030','#3a6030']} position={[-30,0.03,-30]} />
+
+      {/* ── 플레이어2 유닛 배치 구역 (우상단) ── */}
+      <mesh rotation={[-Math.PI/2,0,0]} position={[30,0.01,-30]} receiveShadow>
+        <planeGeometry args={[32,32]} />
+        <meshStandardMaterial map={zoneTex} roughness={0.8} />
+      </mesh>
+      <gridHelper args={[32,32,'#3a6030','#3a6030']} position={[30,0.03,-30]} />
+
+      {/* ── 플레이어3 유닛 배치 구역 (좌하단) ── */}
+      <mesh rotation={[-Math.PI/2,0,0]} position={[-30,0.01,30]} receiveShadow>
+        <planeGeometry args={[32,32]} />
+        <meshStandardMaterial map={zoneTex} roughness={0.8} />
+      </mesh>
+      <gridHelper args={[32,32,'#3a6030','#3a6030']} position={[-30,0.03,30]} />
+
+      {/* ── 플레이어4 유닛 배치 구역 (우하단) ── */}
+      <mesh rotation={[-Math.PI/2,0,0]} position={[30,0.01,30]} receiveShadow>
+        <planeGeometry args={[32,32]} />
+        <meshStandardMaterial map={zoneTex} roughness={0.8} />
+      </mesh>
+      <gridHelper args={[32,32,'#3a6030','#3a6030']} position={[30,0.03,30]} />
 
 
 

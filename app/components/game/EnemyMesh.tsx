@@ -13,15 +13,12 @@ interface EnemyMeshProps {
 }
 
 const BASE_URL = 'https://pub-23e93def3f974eee929ae729aee77d73.r2.dev';
-
 const GYOZA_SCALE = 2;
 
 function GyozaModel() {
   const { scene, animations } = useGLTF(`${BASE_URL}/gyoza.glb`);
   const groupRef = useRef<THREE.Group>(null);
-
   const cloned = useMemo(() => SkeletonUtils.clone(scene), [scene]);
-
   const { actions } = useAnimations(animations, groupRef);
 
   useEffect(() => {
@@ -35,10 +32,9 @@ function GyozaModel() {
   );
 }
 
-// preload 제거: 스폰 시점에 lazy 로드
-
 export function EnemyMesh({ enemy, onSelect }: EnemyMeshProps) {
-  const pos = getPathPosition(enemy.t);
+  // ✅ zoneIndex로 각 존의 경로 위치 계산
+  const pos  = getPathPosition(enemy.t, enemy.zoneIndex ?? 0);
   const size = enemy.isBoss ? 1.4 : 0.6;
 
   return (
@@ -59,26 +55,17 @@ export function EnemyMesh({ enemy, onSelect }: EnemyMeshProps) {
 
       <Html position={[0, size * 0.8 + 0.6, 0]} center distanceFactor={8}>
         <div style={{ width: '60px', pointerEvents: 'none' }}>
-          <div style={{
-            width: '100%', height: '7px',
-            backgroundColor: '#111',
-            border: '1px solid #444',
-            borderRadius: '2px',
-            overflow: 'hidden',
-          }}>
+          <div style={{ width: '100%', height: '7px', backgroundColor: '#111', border: '1px solid #444', borderRadius: '2px', overflow: 'hidden' }}>
             <div style={{
-              width: `${(enemy.hp / enemy.maxHp) * 100}%`,
-              height: '100%',
+              width: `${(enemy.hp / enemy.maxHp) * 100}%`, height: '100%',
               backgroundColor: enemy.hp > enemy.maxHp * 0.5 ? '#00e676' : '#ff4757',
               transition: 'width 0.1s',
             }} />
           </div>
           {enemy.isBoss && (
-            <div style={{
-              color: '#ff4444', fontSize: '9px', fontWeight: 'bold',
-              textAlign: 'center', marginTop: '2px',
-              textShadow: '0 0 4px #ff0000',
-            }}>BOSS</div>
+            <div style={{ color: '#ff4444', fontSize: '9px', fontWeight: 'bold', textAlign: 'center', marginTop: '2px', textShadow: '0 0 4px #ff0000' }}>
+              BOSS
+            </div>
           )}
         </div>
       </Html>
