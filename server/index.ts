@@ -271,7 +271,7 @@ function stopGameLoop(room: Room): void {
 const httpServer = createServer();
 const io = new Server(httpServer, {
   cors: {
-    origin: ['http://localhost:3000', 'https://guilrande-35bk.vercel.app'],
+    origin: '*',
     methods: ['GET', 'POST'],
   },
 });
