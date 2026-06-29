@@ -12,10 +12,12 @@ interface EnemyMeshProps {
   onSelect?: (id: string) => void;
 }
 
+const BASE_URL = 'https://pub-23e93def3f974eee929ae729aee77d73.r2.dev';
+
 const GYOZA_SCALE = 2;
 
 function GyozaModel() {
-  const { scene, animations } = useGLTF('/models/gyoza.glb');
+  const { scene, animations } = useGLTF(`${BASE_URL}/gyoza.glb`);
   const groupRef = useRef<THREE.Group>(null);
 
   const cloned = useMemo(() => SkeletonUtils.clone(scene), [scene]);
@@ -33,7 +35,7 @@ function GyozaModel() {
   );
 }
 
-useGLTF.preload('/models/gyoza.glb');
+// preload 제거: 스폰 시점에 lazy 로드
 
 export function EnemyMesh({ enemy, onSelect }: EnemyMeshProps) {
   const pos = getPathPosition(enemy.t);

@@ -1,4 +1,4 @@
-export type Rarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
+export type Rarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary' | 'transcendent' | 'hidden';
 
 export interface UnitType {
   name: string;
@@ -21,7 +21,9 @@ export const RARITY_COLOR: Record<Rarity, number> = {
   uncommon:  0x4ecdc4,  // 청록
   rare:      0xa855f7,  // 보라
   epic:      0xff9900,  // 주황
-  legendary: 0xff2222,  // 빨강
+  legendary:     0xff2222,  // 빨강
+  transcendent:  0x00ffff,  // 초월 싸이안
+  hidden:        0xff00ff,  // 히든 보라
 };
 
 export const RARITY_LABEL: Record<Rarity, string> = {
@@ -29,7 +31,9 @@ export const RARITY_LABEL: Record<Rarity, string> = {
   uncommon:  '안흔함',
   rare:      '특별함',
   epic:      '희귀함',
-  legendary: '전설적인',
+  legendary:    '전설적인',
+  transcendent: '초월',
+  hidden:       '히든',
 };
 
 // ─────────────────────────────────────────
@@ -197,6 +201,144 @@ const LEGENDARY_UNITS: UnitType[] = [
   { name: '이승우 구일의악을흩뿌린장본인',fullName:'이승우 구일의악을흩뿌린장본인',rarity:'legendary',color:0x8b0000,range:148,damage:900,fireRate:620,speed:175,skillGauge:100,emoji:'😇',attackType:'physical',hp:2500},
 ];
 
+
+// ─────────────────────────────────────────
+// 랜덤유닛 (뽑기풀 외 특수 소환)
+// ─────────────────────────────────────────
+const RANDOM_UNITS: UnitType[] = [
+  { name: '이민형',       fullName: '이민형 보조딜',        rarity: 'uncommon', color: 0x95a5a6, range: 120, damage: 55,  fireRate: 800,  speed: 140, skillGauge: 100, emoji: '🤝', attackType: 'physical', hp: 280 },
+  { name: '주호페이크',   fullName: '주호페이크',           rarity: 'uncommon', color: 0x8e44ad, range: 999, damage: 80,  fireRate: 700,  speed: 150, skillGauge: 100, emoji: '👻', attackType: 'magic',    hp: 260 },
+  { name: '김건모',       fullName: '김건모',               rarity: 'uncommon', color: 0xe74c3c, range: 100, damage: 50,  fireRate: 500,  speed: 160, skillGauge: 100, emoji: '⚡', attackType: 'physical', hp: 240 },
+  { name: '야사카 카나코', fullName: '야사카 카나코',        rarity: 'uncommon', color: 0x9b59b6, range: 150, damage: 90,  fireRate: 1100, speed: 120, skillGauge: 100, emoji: '🌀', attackType: 'magic',    hp: 220 },
+  { name: '호시노 아이',  fullName: '호시노 아이',           rarity: 'uncommon', color: 0xf1c40f, range: 110, damage: 45,  fireRate: 900,  speed: 135, skillGauge: 100, emoji: '⭐', attackType: 'magic',    hp: 230 },
+  { name: '카마도 탄지로', fullName: '카마도 탄지로',        rarity: 'uncommon', color: 0x27ae60, range: 80,  damage: 70,  fireRate: 650,  speed: 165, skillGauge: 100, emoji: '🔥', attackType: 'physical', hp: 300 },
+  { name: '가사이 유노',  fullName: '가사이 유노',           rarity: 'uncommon', color: 0xe67e22, range: 70,  damage: 100, fireRate: 480,  speed: 175, skillGauge: 100, emoji: '🗡️', attackType: 'physical', hp: 270 },
+  { name: '이타도리 유지', fullName: '이타도리 유지',        rarity: 'uncommon', color: 0x2c3e50, range: 90,  damage: 75,  fireRate: 700,  speed: 155, skillGauge: 100, emoji: '👊', attackType: 'physical', hp: 290 },
+  { name: '모몬가',       fullName: '모몬가',               rarity: 'uncommon', color: 0x1a1a2e, range: 140, damage: 85,  fireRate: 1000, speed: 125, skillGauge: 100, emoji: '💀', attackType: 'magic',    hp: 250 },
+  { name: '한마 바키',    fullName: '한마 바키',            rarity: 'uncommon', color: 0xd35400, range: 75,  damage: 95,  fireRate: 600,  speed: 170, skillGauge: 100, emoji: '💪', attackType: 'physical', hp: 310 },
+  { name: '리바이 아커만', fullName: '리바이 아커만',        rarity: 'uncommon', color: 0x2980b9, range: 999, damage: 88,  fireRate: 750,  speed: 145, skillGauge: 100, emoji: '⚔️', attackType: 'physical', hp: 275 },
+  { name: '손오공',       fullName: '손오공',               rarity: 'uncommon', color: 0xf39c12, range: 130, damage: 92,  fireRate: 900,  speed: 160, skillGauge: 100, emoji: '🐒', attackType: 'magic',    hp: 265 },
+  { name: '미도리야 이즈쿠', fullName: '미도리야 이즈쿠',   rarity: 'uncommon', color: 0x27ae60, range: 120, damage: 78,  fireRate: 850,  speed: 140, skillGauge: 100, emoji: '🦸', attackType: 'magic',    hp: 255 },
+  { name: '이즈미 신이치', fullName: '이즈미 신이치',        rarity: 'uncommon', color: 0x16a085, range: 160, damage: 82,  fireRate: 680,  speed: 138, skillGauge: 100, emoji: '🎯', attackType: 'physical', hp: 245 },
+  { name: '나나미 치아키', fullName: '나나미 치아키 다른세계', rarity: 'uncommon', color: 0xff69b4, range: 110, damage: 60, fireRate: 920, speed: 130, skillGauge: 100, emoji: '🎮', attackType: 'magic',   hp: 235 },
+];
+
+// ─────────────────────────────────────────
+// 확장팩 (랜덤유닛 조합 결과)
+// ─────────────────────────────────────────
+const EXPANSION_UNITS: UnitType[] = [
+  { name: '고태훈',       fullName: '고태훈',               rarity: 'rare', color: 0x8e44ad, range: 999, damage: 180, fireRate: 720,  speed: 145, skillGauge: 100, emoji: '💥', attackType: 'magic',    hp: 700 },
+  { name: '김건부',       fullName: '김건부',               rarity: 'rare', color: 0x2c3e50, range: 95,  damage: 160, fireRate: 580,  speed: 160, skillGauge: 100, emoji: '🔵', attackType: 'physical', hp: 680 },
+  { name: '모리야 스와코', fullName: '모리야 스와코',        rarity: 'rare', color: 0x27ae60, range: 130, damage: 200, fireRate: 990,  speed: 130, skillGauge: 100, emoji: '🐸', attackType: 'magic',    hp: 650 },
+  { name: '고죠 사토루',  fullName: '고죠 사토루',           rarity: 'rare', color: 0x00bcd4, range: 180, damage: 220, fireRate: 800,  speed: 148, skillGauge: 100, emoji: '♾️', attackType: 'magic',    hp: 620 },
+  { name: '올마이트',     fullName: '올마이트',             rarity: 'rare', color: 0xf1c40f, range: 110, damage: 240, fireRate: 640,  speed: 155, skillGauge: 100, emoji: '💪', attackType: 'physical', hp: 750 },
+  { name: '한마 유지로',  fullName: '한마 유지로',           rarity: 'rare', color: 0xd35400, range: 85,  damage: 260, fireRate: 560,  speed: 168, skillGauge: 100, emoji: '👊', attackType: 'physical', hp: 780 },
+  { name: '브로리',       fullName: '브로리',               rarity: 'rare', color: 0x2ecc71, range: 100, damage: 280, fireRate: 520,  speed: 175, skillGauge: 100, emoji: '🔱', attackType: 'physical', hp: 820 },
+  { name: '호시노 루비',  fullName: '호시노 루비',           rarity: 'rare', color: 0xff69b4, range: 140, damage: 170, fireRate: 1050, speed: 128, skillGauge: 100, emoji: '💎', attackType: 'magic',    hp: 640 },
+];
+
+// ─────────────────────────────────────────
+// 불멸 (특수 조합)
+// ─────────────────────────────────────────
+const IMMORTAL_UNITS: UnitType[] = [
+  { name: '정윤식 구일의지배자', fullName: '정윤식 구일의지배자', rarity: 'epic', color: 0x9b59b6, range: 155, damage: 380, fireRate: 850,  speed: 145, skillGauge: 100, emoji: '👁️', attackType: 'magic',    hp: 1200 },
+  { name: '김용태 유명인사',     fullName: '김용태 유명인사',     rarity: 'epic', color: 0x1a1a2e, range: 999, damage: 340, fireRate: 640,  speed: 162, skillGauge: 100, emoji: '🌟', attackType: 'physical', hp: 1150 },
+  { name: '정준영 최종보스',     fullName: '정준영 최종보스',     rarity: 'epic', color: 0xf1c40f, range: 120, damage: 420, fireRate: 750,  speed: 148, skillGauge: 100, emoji: '💰', attackType: 'physical', hp: 1300 },
+  { name: '박은석 구일전설',     fullName: '박은석 구일전설',     rarity: 'epic', color: 0x8e44ad, range: 130, damage: 400, fireRate: 700,  speed: 155, skillGauge: 100, emoji: '🦅', attackType: 'physical', hp: 1250 },
+  { name: '신지우 공포를몰아오는신', fullName: '신지우 공포를몰아오는신', rarity: 'epic', color: 0xff0066, range: 145, damage: 360, fireRate: 780, speed: 152, skillGauge: 100, emoji: '👊', attackType: 'magic', hp: 1180 },
+  { name: '이승우 태초의악마',   fullName: '이승우 태초의악마',   rarity: 'epic', color: 0x8b0000, range: 138, damage: 440, fireRate: 720,  speed: 158, skillGauge: 100, emoji: '😇', attackType: 'magic',    hp: 1350 },
+  { name: '고도현 전교1등',      fullName: '고도현 전교1등',      rarity: 'epic', color: 0x4a90d9, range: 160, damage: 330, fireRate: 900,  speed: 132, skillGauge: 100, emoji: '📚', attackType: 'magic',    hp: 1100 },
+  { name: '이이삭 싸움패왕',     fullName: '이이삭 싸움패왕',     rarity: 'epic', color: 0xd35400, range: 110, damage: 460, fireRate: 620,  speed: 165, skillGauge: 100, emoji: '👑', attackType: 'physical', hp: 1400 },
+];
+
+// ─────────────────────────────────────────
+// 영원 (Save 조합)
+// ─────────────────────────────────────────
+const ETERNAL_UNITS: UnitType[] = [
+  { name: '김영원 교수의은사',   fullName: '김영원 교수의은사',   rarity: 'legendary', color: 0xf1c40f, range: 150, damage: 550, fireRate: 700,  speed: 150, skillGauge: 100, emoji: '🎓', attackType: 'physical', hp: 1800 },
+  { name: '조세민 타락한신',     fullName: '조세민 타락한신의추종자', rarity: 'legendary', color: 0x9b59b6, range: 135, damage: 580, fireRate: 920, speed: 145, skillGauge: 100, emoji: '😈', attackType: 'magic', hp: 1750 },
+  { name: '이지원 악의구렁텅이', fullName: '이지원 악의구렁텅이의여제', rarity: 'legendary', color: 0x4a235a, range: 165, damage: 620, fireRate: 860, speed: 138, skillGauge: 100, emoji: '🌑', attackType: 'magic', hp: 1850 },
+  { name: '문필환 구일왕자',     fullName: '문필환 구일왕자',     rarity: 'legendary', color: 0xf39c12, range: 140, damage: 660, fireRate: 780,  speed: 148, skillGauge: 100, emoji: '👑', attackType: 'physical', hp: 1900 },
+  { name: '서민성 은둔고수',     fullName: '서민성 은둔고수',     rarity: 'legendary', color: 0x145a32, range: 125, damage: 700, fireRate: 650,  speed: 158, skillGauge: 100, emoji: '🌿', attackType: 'magic',    hp: 1950 },
+  { name: '김정래 언변술사',     fullName: '김정래 언변술사',     rarity: 'legendary', color: 0x2c3e50, range: 148, damage: 720, fireRate: 920,  speed: 132, skillGauge: 100, emoji: '🏆', attackType: 'physical', hp: 2000 },
+  { name: '윤현모 교활한바보',   fullName: '윤현모 교활하고비겁한바보병신', rarity: 'legendary', color: 0x34495e, range: 155, damage: 650, fireRate: 800, speed: 142, skillGauge: 100, emoji: '💼', attackType: 'physical', hp: 1880 },
+  { name: '최상호 킹카',         fullName: '최상호 킹카',         rarity: 'legendary', color: 0xff2222, range: 160, damage: 800, fireRate: 650,  speed: 175, skillGauge: 100, emoji: '♠️', attackType: 'physical', hp: 2400 },
+];
+
+// ─────────────────────────────────────────
+// 제한 (특수 조건 조합)
+// ─────────────────────────────────────────
+const LIMITED_UNITS: UnitType[] = [
+  { name: '이충민',       fullName: '이충민',               rarity: 'epic', color: 0x8e44ad, range: 145, damage: 300, fireRate: 950,  speed: 138, skillGauge: 100, emoji: '🎲', attackType: 'magic',    hp: 1050 },
+  { name: '최영민',       fullName: '최영민',               rarity: 'epic', color: 0x3498db, range: 130, damage: 320, fireRate: 820,  speed: 142, skillGauge: 100, emoji: '🛡️', attackType: 'physical', hp: 1100 },
+  { name: '김강민',       fullName: '김강민',               rarity: 'epic', color: 0xf1c40f, range: 105, damage: 380, fireRate: 680,  speed: 158, skillGauge: 100, emoji: '⚡', attackType: 'physical', hp: 1200 },
+  { name: '이유범',       fullName: '이유범',               rarity: 'epic', color: 0xe67e22, range: 118, damage: 340, fireRate: 720,  speed: 152, skillGauge: 100, emoji: '💢', attackType: 'physical', hp: 1150 },
+  { name: '전법규',       fullName: '전법규',               rarity: 'epic', color: 0x7f8c8d, range: 160, damage: 310, fireRate: 1000, speed: 130, skillGauge: 100, emoji: '🌀', attackType: 'magic',    hp: 1000 },
+  { name: '김민규',       fullName: '김민규',               rarity: 'epic', color: 0x6c3483, range: 170, damage: 290, fireRate: 1050, speed: 128, skillGauge: 100, emoji: '👁️', attackType: 'magic',    hp: 980  },
+  { name: '임준성',       fullName: '임준성',               rarity: 'epic', color: 0x2c3e50, range: 155, damage: 305, fireRate: 880,  speed: 135, skillGauge: 100, emoji: '🎰', attackType: 'magic',    hp: 1020 },
+  { name: '강보명',       fullName: '강보명',               rarity: 'epic', color: 0x27ae60, range: 100, damage: 360, fireRate: 600,  speed: 168, skillGauge: 100, emoji: '💥', attackType: 'physical', hp: 1180 },
+  { name: '박성호',       fullName: '박성호',               rarity: 'epic', color: 0x9b59b6, range: 140, damage: 330, fireRate: 780,  speed: 148, skillGauge: 100, emoji: '🎭', attackType: 'magic',    hp: 1080 },
+];
+
+// ─────────────────────────────────────────
+// 초월 (최상위 조합)
+// ─────────────────────────────────────────
+const TRANSCENDENT_UNITS: UnitType[] = [
+  { name: '최상호 킹카될뻔한사나이', fullName: '최상호 킹카가될뻔했던사나이', rarity: 'transcendent', color: 0x00ffff, range: 150, damage: 1200, fireRate: 650,  speed: 178, skillGauge: 100, emoji: '♠️', attackType: 'physical', hp: 5000 },
+  { name: '최상호 씹덕대마왕',       fullName: '최상호 씹덕대마왕',           rarity: 'transcendent', color: 0x00e5ff, range: 160, damage: 1100, fireRate: 700,  speed: 172, skillGauge: 100, emoji: '👑', attackType: 'magic',    hp: 4800 },
+  { name: '노태현 초구일급절망',     fullName: '노태현 초구일급절망',         rarity: 'transcendent', color: 0x00bcd4, range: 180, damage: 1300, fireRate: 560,  speed: 165, skillGauge: 100, emoji: '😱', attackType: 'magic',    hp: 5200 },
+  { name: '양재모 물리간호사',       fullName: '양재모 물리간호사',           rarity: 'transcendent', color: 0x00e676, range: 130, damage: 1400, fireRate: 600,  speed: 158, skillGauge: 100, emoji: '💊', attackType: 'physical', hp: 5500 },
+  { name: '강주혁 명석한두뇌',       fullName: '강주혁 명석한두뇌',           rarity: 'transcendent', color: 0x69f0ae, range: 155, damage: 1150, fireRate: 820,  speed: 168, skillGauge: 100, emoji: '🧠', attackType: 'magic',    hp: 4900 },
+  { name: '강재규 극악무도악질소악마', fullName: '강재규 극악무도악질소악마', rarity: 'transcendent', color: 0xb9f6ca, range: 140, damage: 1250, fireRate: 730,  speed: 162, skillGauge: 100, emoji: '😈', attackType: 'physical', hp: 5100 },
+  { name: '박민석 만년공복',         fullName: '박민석 만년공복',             rarity: 'transcendent', color: 0x00ffb3, range: 148, damage: 1350, fireRate: 750,  speed: 155, skillGauge: 100, emoji: '🍳', attackType: 'physical', hp: 5300 },
+  { name: '김민준 외동판다',         fullName: '김민준 외동판다!',            rarity: 'transcendent', color: 0x40c4ff, range: 165, damage: 1080, fireRate: 900,  speed: 148, skillGauge: 100, emoji: '🐼', attackType: 'magic',    hp: 4700 },
+  { name: '박민수 카무쿠라이즈루',   fullName: '박민수 카무쿠라이즈루',       rarity: 'transcendent', color: 0x00b0ff, range: 130, damage: 1450, fireRate: 580,  speed: 175, skillGauge: 100, emoji: '🎭', attackType: 'physical', hp: 5600 },
+  { name: '이재윤 원숭이왕',         fullName: '이재윤 원숭이왕',             rarity: 'transcendent', color: 0x80d8ff, range: 999, damage: 1180, fireRate: 650,  speed: 162, skillGauge: 100, emoji: '🐵', attackType: 'physical', hp: 5000 },
+  { name: '임장혁 훌륭한장애인',     fullName: '임장혁 훌륭한장애인',         rarity: 'transcendent', color: 0x84ffff, range: 145, damage: 1220, fireRate: 700,  speed: 168, skillGauge: 100, emoji: '💢', attackType: 'magic',    hp: 5050 },
+  { name: '엄태웅 태웅사마',         fullName: '엄태웅 태웅사마',             rarity: 'transcendent', color: 0xa7ffeb, range: 120, damage: 1500, fireRate: 540,  speed: 180, skillGauge: 100, emoji: '💣', attackType: 'physical', hp: 5800 },
+  { name: '조성진 상냥한작은거인',   fullName: '조성진 상냥한마음을가진작은거인', rarity: 'transcendent', color: 0xccff90, range: 135, damage: 1280, fireRate: 620, speed: 158, skillGauge: 100, emoji: '🌱', attackType: 'physical', hp: 5150 },
+  { name: '박기찬 섹스킹',           fullName: '박기찬 섹스킹',               rarity: 'transcendent', color: 0xf4ff81, range: 140, damage: 1320, fireRate: 690,  speed: 165, skillGauge: 100, emoji: '😎', attackType: 'physical', hp: 5250 },
+  { name: '김만경 집행의심판자',     fullName: '김만경 집행의심판자',         rarity: 'transcendent', color: 0xffe57f, range: 130, damage: 1200, fireRate: 760,  speed: 152, skillGauge: 100, emoji: '⚖️', attackType: 'physical', hp: 5000 },
+  { name: '이태훈 골목대장',         fullName: '이태훈 골목대장',             rarity: 'transcendent', color: 0xffd180, range: 145, damage: 1380, fireRate: 640,  speed: 172, skillGauge: 100, emoji: '👿', attackType: 'physical', hp: 5400 },
+  { name: '신문철 문철이는못말려',   fullName: '신문철 문철이는못말려',       rarity: 'transcendent', color: 0xff9e80, range: 150, damage: 1160, fireRate: 880,  speed: 148, skillGauge: 100, emoji: '🌀', attackType: 'magic',    hp: 4850 },
+  { name: '김건 돌아와줘건아',       fullName: '김건 돌아와줘,건아!',         rarity: 'transcendent', color: 0xea80fc, range: 999, damage: 1420, fireRate: 760,  speed: 162, skillGauge: 100, emoji: '⚡', attackType: 'physical', hp: 5500 },
+  { name: '배성령 인간탈쓴암살자',   fullName: '배성령 인간의탈을쓴암살자',  rarity: 'transcendent', color: 0xff80ab, range: 180, damage: 1260, fireRate: 680,  speed: 158, skillGauge: 100, emoji: '🗡️', attackType: 'magic',    hp: 5100 },
+  { name: '구주호 힘법사',           fullName: '구주호 힘법사',               rarity: 'transcendent', color: 0xff6e40, range: 125, damage: 1340, fireRate: 720,  speed: 160, skillGauge: 100, emoji: '💪', attackType: 'physical', hp: 5300 },
+  { name: '황준석 구일대표홍보대사', fullName: '황준석 구일대표홍보대사',     rarity: 'transcendent', color: 0xffd740, range: 999, damage: 1100, fireRate: 800,  speed: 150, skillGauge: 100, emoji: '🤝', attackType: 'physical', hp: 4900 },
+  { name: '김경현 셰프빅헤드',       fullName: '김경현 셰프빅헤드',           rarity: 'transcendent', color: 0x69f0ae, range: 145, damage: 1280, fireRate: 840,  speed: 145, skillGauge: 100, emoji: '👨‍🍳', attackType: 'magic',   hp: 5100 },
+  { name: '두유찬 꺽다리',           fullName: '두유찬 꺽다리',               rarity: 'transcendent', color: 0x40c4ff, range: 130, damage: 1200, fireRate: 700,  speed: 155, skillGauge: 100, emoji: '🦴', attackType: 'physical', hp: 5000 },
+  { name: '임채민 흔들리지않는신앙', fullName: '임채민 흔들리지않는신앙심',  rarity: 'transcendent', color: 0x84ffff, range: 150, damage: 1150, fireRate: 860,  speed: 148, skillGauge: 100, emoji: '✝️', attackType: 'magic',    hp: 4850 },
+  { name: '유재헌 영겁의도망꾼',     fullName: '유재헌 영겁의도망꾼',         rarity: 'transcendent', color: 0xb9f6ca, range: 999, damage: 1180, fireRate: 780,  speed: 165, skillGauge: 100, emoji: '🏃', attackType: 'physical', hp: 4950 },
+];
+
+// ─────────────────────────────────────────
+// 히든 (특수 조합 히든 유닛)
+// ─────────────────────────────────────────
+const HIDDEN_UNITS: UnitType[] = [
+  // 사람
+  { name: '최윤서',   fullName: '최윤서',   rarity: 'hidden', color: 0xff00ff, range: 160, damage: 800,  fireRate: 950,  speed: 140, skillGauge: 100, emoji: '💜', attackType: 'magic',    hp: 3000 },
+  { name: '이동엽',   fullName: '이동엽',   rarity: 'hidden', color: 0xcc00cc, range: 999, damage: 720,  fireRate: 700,  speed: 155, skillGauge: 100, emoji: '🌑', attackType: 'physical', hp: 2800 },
+  { name: '황정기',   fullName: '황정기 히든', rarity: 'hidden', color: 0xaa00aa, range: 130, damage: 900, fireRate: 800, speed: 148, skillGauge: 100, emoji: '👑', attackType: 'physical', hp: 3200 },
+  { name: '전유라',   fullName: '전유라',   rarity: 'hidden', color: 0xdd44dd, range: 145, damage: 750,  fireRate: 1000, speed: 138, skillGauge: 100, emoji: '🌸', attackType: 'magic',    hp: 2900 },
+  { name: '전주연',   fullName: '전주연',   rarity: 'hidden', color: 0xff44ff, range: 155, damage: 780,  fireRate: 920,  speed: 135, skillGauge: 100, emoji: '💫', attackType: 'magic',    hp: 2950 },
+  { name: '여은서',   fullName: '여은서',   rarity: 'hidden', color: 0xee22ee, range: 110, damage: 820,  fireRate: 850,  speed: 145, skillGauge: 100, emoji: '⚡', attackType: 'physical', hp: 3050 },
+  { name: '최경범',   fullName: '최경범',   rarity: 'hidden', color: 0xbb00bb, range: 105, damage: 850,  fireRate: 760,  speed: 158, skillGauge: 100, emoji: '💀', attackType: 'physical', hp: 3100 },
+  { name: '석성례',   fullName: '석성례',   rarity: 'hidden', color: 0xcc22cc, range: 130, damage: 830,  fireRate: 820,  speed: 145, skillGauge: 100, emoji: '🔥', attackType: 'physical', hp: 3080 },
+  { name: '정기훈',   fullName: '정기훈',   rarity: 'hidden', color: 0xdd00dd, range: 150, damage: 760,  fireRate: 980,  speed: 132, skillGauge: 100, emoji: '✨', attackType: 'magic',    hp: 2880 },
+  { name: '서승혁',   fullName: '서승혁',   rarity: 'hidden', color: 0xaa22aa, range: 125, damage: 870,  fireRate: 700,  speed: 162, skillGauge: 100, emoji: '🗡️', attackType: 'physical', hp: 3150 },
+  { name: '이요한',   fullName: '이요한',   rarity: 'hidden', color: 0xff22ff, range: 140, damage: 810,  fireRate: 880,  speed: 148, skillGauge: 100, emoji: '🌊', attackType: 'magic',    hp: 3020 },
+  { name: '정욱진',   fullName: '정욱진',   rarity: 'hidden', color: 0xee44ee, range: 160, damage: 790,  fireRate: 1020, speed: 128, skillGauge: 100, emoji: '🌀', attackType: 'magic',    hp: 2960 },
+  { name: '한나웅',   fullName: '한나웅',   rarity: 'hidden', color: 0xcc44cc, range: 115, damage: 860,  fireRate: 750,  speed: 155, skillGauge: 100, emoji: '💥', attackType: 'physical', hp: 3120 },
+  { name: '김영학',   fullName: '김영학',   rarity: 'hidden', color: 0xbb22bb, range: 999, damage: 840,  fireRate: 800,  speed: 150, skillGauge: 100, emoji: '⭐', attackType: 'physical', hp: 3060 },
+  // 장소 (음식 캐릭터)
+  { name: '호치킨',       fullName: '호치킨',       rarity: 'hidden', color: 0xff66ff, range: 110, damage: 720,  fireRate: 680,  speed: 165, skillGauge: 100, emoji: '🍗', attackType: 'physical', hp: 2750 },
+  { name: '이삭토스트',   fullName: '이삭토스트',   rarity: 'hidden', color: 0xee66ee, range: 999, damage: 700,  fireRate: 650,  speed: 160, skillGauge: 100, emoji: '🍞', attackType: 'physical', hp: 2700 },
+  { name: '미소야',       fullName: '미소야',       rarity: 'hidden', color: 0xdd66dd, range: 125, damage: 680,  fireRate: 1000, speed: 145, skillGauge: 100, emoji: '🍜', attackType: 'magic',    hp: 2680 },
+  { name: '맥주만땅',     fullName: '맥주만땅',     rarity: 'hidden', color: 0xcc66cc, range: 130, damage: 760,  fireRate: 900,  speed: 155, skillGauge: 100, emoji: '🍺', attackType: 'magic',    hp: 2800 },
+  { name: '감탄떡볶이',   fullName: '감탄떡볶이',   rarity: 'hidden', color: 0xff44cc, range: 115, damage: 740,  fireRate: 750,  speed: 158, skillGauge: 100, emoji: '🌶️', attackType: 'physical', hp: 2780 },
+];
+
+
 // ─────────────────────────────────────────
 // 전체 유닛 목록 (뽑기풀 = COMMON만)
 // ─────────────────────────────────────────
@@ -204,8 +346,15 @@ export const UNIT_TYPES: UnitType[] = [
   ...COMMON_UNITS,
   ...UNCOMMON_UNITS,
   ...RARE_UNITS,
+  ...EXPANSION_UNITS,
   ...EPIC_UNITS,
+  ...IMMORTAL_UNITS,
+  ...LIMITED_UNITS,
   ...LEGENDARY_UNITS,
+  ...ETERNAL_UNITS,
+  ...RANDOM_UNITS,
+  ...TRANSCENDENT_UNITS,
+  ...HIDDEN_UNITS,
 ];
 
 // 뽑기풀 (흔함만)

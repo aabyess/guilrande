@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState, useEffect, useMemo } from 'react';
+import { useRef, useState, useEffect, useMemo, Suspense } from 'react';
 import { Html, useGLTF, useAnimations } from '@react-three/drei';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
@@ -18,12 +18,19 @@ const RARITY_EMISSIVE_INTENSITY: Record<string, number> = {
 
 const SCALE = 1.6;
 
+const BASE_URL = 'https://pub-23e93def3f974eee929ae729aee77d73.r2.dev';
+
 const UNIT_MODEL_MAP: Record<string, string> = {
-  '김수빈': '/models/subin.glb',
-  '최상호': '/models/onePieces/onepiece_fake_luffy.glb',
-  '노태현': '/models/onePieces/onepiece_akainu.glb',
-  '양재모': '/models/onePieces/onepiece_jabra_cp0.glb',
-  '박민석': '/models/onePieces/onepiece_sanji.glb',
+  '김수빈': `${BASE_URL}/subin.glb`,
+  '최상호': `${BASE_URL}/onePieces/onepiece_fake_luffy.glb`,
+  '노태현': `${BASE_URL}/onePieces/onepiece_akainu.glb`,
+  '양재모': `${BASE_URL}/onePieces/onepiece_jabra_cp0.glb`,
+  '박민석': `${BASE_URL}/onePieces/onepiece_sanji.glb`,
+  '강주혁': `${BASE_URL}/onePieces/onepiece_charlos.glb`,
+  '강재규': `${BASE_URL}/onePieces/onepiece_chopper.glb`,
+  '문필환': `${BASE_URL}/jojos/yoshikage_jojo.glb`,
+  '박민수': `${BASE_URL}/bleachs/Ikkaku_bleach.glb`,
+  '임장혁': `${BASE_URL}/onePieces/onepiece_magellan.glb`,
 };
 
 const UNIT_MODEL_ROTATION: Record<string, [number, number, number]> = {
@@ -32,6 +39,11 @@ const UNIT_MODEL_ROTATION: Record<string, [number, number, number]> = {
   '노태현': [0, Math.PI, 0],
   '양재모': [0, Math.PI, 0],
   '박민석': [0, Math.PI, 0],
+  '강주혁': [0, Math.PI, 0],
+  '강재규': [0, Math.PI, 0],
+  '문필환': [0, Math.PI, 0],
+  '박민수': [0, Math.PI, 0],
+  '임장혁': [0, Math.PI, 0],
 };
 
 // 유닛별 자체 애니 이름 (idle / attack)
@@ -58,10 +70,23 @@ const NO_ANIMATION_UNITS = new Set<string>([
 // ── 모델별 scene 캐시 (clone 비용 절감) ──────────────────────
 const sceneCache = new Map<string, THREE.Group>();
 
+// GLB 로딩 중 표시할 fallback — 반투명 박스
+function UnitModelFallback({ rarity }: { rarity: string }) {
+  const color = RARITY_EMISSIVE[rarity] === '#000000'
+    ? '#888888'
+    : RARITY_EMISSIVE[rarity];
+  return (
+    <mesh position={[0, 1.5, 0]}>
+      <boxGeometry args={[1, 3, 1]} />
+      <meshStandardMaterial color={color} transparent opacity={0.5} />
+    </mesh>
+  );
+}
+
 function UnitModel({ unit, isSelected, hovered, isAttacking }: {
   unit: UnitInstance; isSelected: boolean; hovered: boolean; isAttacking: boolean;
 }) {
-  const modelPath  = UNIT_MODEL_MAP[unit.type.name] ?? '/models/default.glb';
+  const modelPath  = UNIT_MODEL_MAP[unit.type.name] ?? `${BASE_URL}/default.glb`;
   const rotation   = UNIT_MODEL_ROTATION[unit.type.name] ?? [0, Math.PI, 0];
   const isNative   = NATIVE_ANIM_UNITS.has(unit.type.name);
   const nativeAnim = UNIT_ANIM_MAP[unit.type.name];
@@ -69,7 +94,7 @@ function UnitModel({ unit, isSelected, hovered, isAttacking }: {
   // 메시용 GLB
   const { scene } = useGLTF(modelPath);
   // 자체 애니가 없는 유닛은 default.glb에서 애니 차용
-  const { animations: defaultAnims } = useGLTF('/models/default.glb');
+  const { animations: defaultAnims } = useGLTF(`${BASE_URL}/default.glb`);
   const { animations: modelAnims }   = useGLTF(modelPath);
 
   const animations = isNative ? modelAnims : defaultAnims;
@@ -193,6 +218,10 @@ function UnitModel({ unit, isSelected, hovered, isAttacking }: {
     clonedScene.traverse((obj) => {
       if (!(obj as THREE.Mesh).isMesh) return;
       const mesh = obj as THREE.Mesh;
+
+      // GLB 서브메시 raycast 비활성화 → 클릭은 투명 박스가 담당
+      mesh.raycast = () => {};
+
       const mats = Array.isArray(mesh.material)
         ? mesh.material as THREE.Material[]
         : [mesh.material as THREE.Material];
@@ -212,13 +241,8 @@ function UnitModel({ unit, isSelected, hovered, isAttacking }: {
   );
 }
 
-// preload — 앱 시작 시 즉시 캐싱
-useGLTF.preload('/models/default.glb');
-useGLTF.preload('/models/subin.glb');
-useGLTF.preload('/models/onePieces/onepiece_fake_luffy.glb');
-useGLTF.preload('/models/onePieces/onepiece_akainu.glb');
-useGLTF.preload('/models/onePieces/onepiece_jabra_cp0.glb');
-useGLTF.preload('/models/onePieces/onepiece_sanji.glb');
+// ── preload 제거: 스폰 시점에 lazy 로드로 전환 ──────────────
+// 최초 스폰된 유닛 타입만 useGLTF 내부 캐시에 올라감
 
 interface UnitMeshProps { unit: UnitInstance; }
 
@@ -277,7 +301,9 @@ export function UnitMesh({ unit }: UnitMeshProps) {
         </mesh>
       )}
 
-      <UnitModel unit={unit} isSelected={isSelected} hovered={hovered} isAttacking={isAttacking} />
+      <Suspense fallback={<UnitModelFallback rarity={unit.type.rarity} />}>
+        <UnitModel unit={unit} isSelected={isSelected} hovered={hovered} isAttacking={isAttacking} />
+      </Suspense>
 
       <Html position={[0, 2.2, 0]} center distanceFactor={10}>
         <div style={{ width:'80px', pointerEvents:'none' }}>

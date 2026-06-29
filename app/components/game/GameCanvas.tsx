@@ -11,12 +11,7 @@ import { StoryZoneObjects } from './StoryZone';
 import { useGameLoop } from './GameLoop';
 import { useGameStore } from '../../store/useGameStore';
 
-useGLTF.preload('/models/default.glb');
-useGLTF.preload('/models/subin.glb');
-useGLTF.preload('/models/onepiece_fake_luffy.glb');
-useGLTF.preload('/models/onepiece_akainu.glb');
-useGLTF.preload('/models/onepiece_jabra_cp0.glb');
-useGLTF.preload('/models/onepiece_sanji.glb');
+// preload 제거: UnitMesh/EnemyMesh에서 lazy 로드로 처리
 
 const GROUND_PLANE = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 
@@ -412,7 +407,7 @@ export function GameCanvas({
       onContextMenu={handleContextMenu}
     >
       <Canvas
-        shadows
+        shadows={{ type: THREE.PCFShadowMap }}
         // 📌 수정 포인트: 초기 카메라 Y = 45 (시야150과 동일)
         // VISION_PRESETS[150] = 45 와 맞춰져 있음
         camera={{ position: [0, 35, 23], fov: 45 }}
