@@ -5,7 +5,7 @@ import { io, Socket } from 'socket.io-client';
 // 배포: 환경변수로 주입 (NEXT_PUBLIC_SOCKET_URL)
 
 const SERVER_URL =
-  process.env.NEXT_PUBLIC_SOCKET_URL ?? 'http://localhost:4000';
+  process.env.NEXT_PUBLIC_SOCKET_URL ?? 'https://guilrande-production.up.railway.app';
 
 // ─── 싱글턴 소켓 ──────────────────────────────────────────────────────────────
 
