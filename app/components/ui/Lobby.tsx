@@ -200,10 +200,10 @@ export default function Lobby({ onGameStart }: LobbyProps) {
           <div style={{ textAlign: 'center', marginBottom: '40px' }}>
             <div style={{ fontSize: '44px', marginBottom: '10px' }}>⚔️</div>
             <div style={{ color: C.gold, fontSize: '32px', fontWeight: 900, letterSpacing: '0.12em', textShadow: `0 0 24px rgba(255,215,0,0.25)` }}>
-              길란데
+              G.R.D
             </div>
             <div style={{ color: C.muted, fontSize: '12px', letterSpacing: '0.14em', marginTop: '6px', textTransform: 'uppercase' }}>
-              4인 멀티플레이어
+              구일 랜덤 디펜스
             </div>
           </div>
 

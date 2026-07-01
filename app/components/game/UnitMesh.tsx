@@ -24,15 +24,17 @@ const BASE_URL = 'https://pub-23e93def3f974eee929ae729aee77d73.r2.dev';
 
 const UNIT_MODEL_MAP: Record<string, string> = {
   '김수빈': `${BASE_URL}/subin.glb`,
-  '최상호': `${BASE_URL}/onePieces/onepiece_fake_luffy.glb`,
+  '최상호': `${BASE_URL}/dragon_ball/vegeta_dragon_ball.glb`,
   '노태현': `${BASE_URL}/onePieces/onepiece_akainu.glb`,
   '양재모': `${BASE_URL}/onePieces/onepiece_jabra_cp0.glb`,
   '박민석': `${BASE_URL}/onePieces/onepiece_sanji.glb`,
   '강주혁': `${BASE_URL}/onePieces/onepiece_whitebeard.glb`,
   '강재규': `${BASE_URL}/onePieces/onepiece_chopper.glb`,
-  '문필환': `${BASE_URL}/jojos/yoshikage_jojo.glb`,
+  '문필환': `${BASE_URL}/dragon_ball/trunks_dragon_ball.glb`,
   '박민수': `${BASE_URL}/bleachs/Ikkaku_bleach.glb`,
   '임장혁': `${BASE_URL}/onePieces/onepiece_magellan.glb`,
+  '이재윤 논란의중심': `${BASE_URL}/monkey.glb`,
+  '이재윤': `${BASE_URL}/monkey.glb`,
 };
 
 const UNIT_MODEL_ROTATION: Record<string, [number, number, number]> = {
@@ -46,6 +48,8 @@ const UNIT_MODEL_ROTATION: Record<string, [number, number, number]> = {
   '문필환': [0, Math.PI, 0],
   '박민수': [0, Math.PI, 0],
   '임장혁': [0, Math.PI, 0],
+  '이재윤 논란의중심': [0, Math.PI, 0],
+  '이재윤': [0, Math.PI, 0],
 };
 
 // 📌 유닛별 개별 스케일 (기본값 SCALE=1.6 대신 적용)
@@ -57,9 +61,12 @@ const UNIT_MODEL_SCALE: Record<string, number> = {
 // 유닛별 자체 애니 이름 (idle / attack)
 // 없으면 default.glb fallback 사용
 const UNIT_ANIM_MAP: Record<string, { idle: string; attack: string }> = {
-  '최상호': { idle: 'pl_demaroblack_orig01_idle_a', attack: 'pl_demaroblack_orig01_combo_a' },
+  '최상호': { idle: '', attack: 'golpe' },
   '노태현': { idle: 'pl_akainu_gens01_idle_a',      attack: 'pl_akainu_gens01_combo_a'     },
   '양재모': { idle: 'pl_jabra_jinj01_idle_a',       attack: 'pl_jabra_jinj01_combo_a'      },
+  '문필환': { idle: '', attack: 'Golpe' },
+  '이재윤 논란의중심': { idle: 'sun_monkey_king_in_game_fight_idle', attack: 'sun_monkey_king_in_game_attack1' },
+  '이재윤': { idle: 'sun_monkey_king_in_game_fight_idle', attack: 'sun_monkey_king_in_game_attack1' },
   // 박민석(sanji)은 mixamo 애니 1개 → default fallback 사용
 };
 
@@ -116,7 +123,7 @@ function UnitModel({ unit, isSelected, hovered, isAttacking }: {
   }, [modelPath, scene]);
 
   const groupRef = useRef<THREE.Group>(null);
-  const { actions, mixer } = useAnimations(animations, groupRef);
+  const { mixer } = useAnimations(animations, groupRef);
   const facingRef = useRef<number>(0);
 
   const emissiveColor = RARITY_EMISSIVE[unit.type.rarity] ?? '#000000';
@@ -124,20 +131,31 @@ function UnitModel({ unit, isSelected, hovered, isAttacking }: {
 
   const prevAttackingRef = useRef<boolean | null>(null);
 
+  // clip 이름 → clip 객체 조회용 (mixer.clipAction에 전달)
+  const clipMap = useMemo(() => {
+    const m = new Map<string, THREE.AnimationClip>();
+    animations?.forEach(c => m.set(c.name, c));
+    return m;
+  }, [animations]);
+
   useEffect(() => {
     // NO_ANIMATION_UNITS → 무조건 정지
     if (NO_ANIMATION_UNITS.has(unit.type.name)) return;
-    if (!actions) return;
+    if (!mixer) return;
 
     const attackKey = isNative ? nativeAnim?.attack : ANIM_ATTACK;
     const idleKey   = isNative ? nativeAnim?.idle   : ANIM_IDLE;
 
+    const idleClip   = idleKey   ? clipMap.get(idleKey)   : undefined;
+    const attackClip = attackKey ? clipMap.get(attackKey) : undefined;
+
     // 처음 마운트 시 → idle 재생
     if (prevAttackingRef.current === null) {
-      if (idleKey && actions[idleKey]) {
-        actions[idleKey]?.reset().fadeIn(0.2).play();
+      if (idleClip) {
+        mixer.clipAction(idleClip, groupRef.current ?? undefined)
+          .reset().fadeIn(0.2).play();
       } else {
-        Object.values(actions).forEach(a => a?.stop());
+        mixer.stopAllAction();
       }
       prevAttackingRef.current = false;
       return;
@@ -148,22 +166,50 @@ function UnitModel({ unit, isSelected, hovered, isAttacking }: {
     prevAttackingRef.current = isAttacking;
 
     if (isAttacking) {
-      if (idleKey) actions[idleKey]?.fadeOut(0.15);
-      if (attackKey && actions[attackKey]) {
-        actions[attackKey]?.reset().fadeIn(0.15).play();
-      }
-    } else {
-      if (attackKey) actions[attackKey]?.fadeOut(0.15);
-      if (idleKey && actions[idleKey]) {
-        actions[idleKey]?.reset().fadeIn(0.2).play();
+      if (idleClip) mixer.clipAction(idleClip, groupRef.current ?? undefined).fadeOut(0.15);
+      if (attackClip) {
+        const attackAction = mixer.clipAction(attackClip, groupRef.current ?? undefined);
+        attackAction.reset();
+        attackAction.setLoop(THREE.LoopOnce, 1);
+        attackAction.clampWhenFinished = true;
+        attackAction.fadeIn(0.15).play();
       }
     }
-  }, [actions, isAttacking, isNative, nativeAnim, unit.type.name]);
+    // isAttacking → false 전환 시 여기서 바로 attackClip을 끊지 않음.
+    // 공격 모션이 끝까지 재생되도록 두고, 아래 'finished' 리스너에서 idle로 전환함.
+  }, [mixer, clipMap, isAttacking, isNative, nativeAnim, unit.type.name]);
+
+  // 공격 애니메이션이 자연스럽게 끝났을 때만 idle로 복귀
+  useEffect(() => {
+    if (NO_ANIMATION_UNITS.has(unit.type.name)) return;
+    if (!mixer) return;
+
+    const attackKey = isNative ? nativeAnim?.attack : ANIM_ATTACK;
+    const idleKey   = isNative ? nativeAnim?.idle   : ANIM_IDLE;
+
+    const attackClip = attackKey ? clipMap.get(attackKey) : undefined;
+    const idleClip   = idleKey   ? clipMap.get(idleKey)   : undefined;
+    if (!attackClip) return;
+
+    const onFinished = (e: { action: THREE.AnimationAction }) => {
+      const attackAction = mixer.clipAction(attackClip, groupRef.current ?? undefined);
+      if (e.action !== attackAction) return;
+      attackAction.fadeOut(0.15);
+      if (idleClip) {
+        mixer.clipAction(idleClip, groupRef.current ?? undefined)
+          .reset().fadeIn(0.2).play();
+      }
+      // idleClip이 없는 유닛(정지 상태)은 clampWhenFinished로 마지막 프레임에서 자연스럽게 정지
+    };
+
+    mixer.addEventListener('finished', onFinished);
+    return () => mixer.removeEventListener('finished', onFinished);
+  }, [mixer, clipMap, isNative, nativeAnim, unit.type.name]);
 
   useFrame((_, delta) => {
     // 애니메이션만 NO_ANIMATION_UNITS 제외, facing은 모든 유닛 적용
     if (!NO_ANIMATION_UNITS.has(unit.type.name)) {
-      const ATTACK_SPEED = 0.005;
+      const ATTACK_SPEED = 0.4;
       const IDLE_SPEED   = 0.8;
       mixer?.update(delta * (isAttacking ? ATTACK_SPEED : IDLE_SPEED));
     }

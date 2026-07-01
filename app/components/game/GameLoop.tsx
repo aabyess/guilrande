@@ -57,6 +57,22 @@ export function useGameLoop() {
     });
 
     socket.on('enemy_died', ({ enemyId }: { enemyId: string }) => {
+      const s = useGameStore.getState();
+      const dead = s.enemies.find(e => e.id === enemyId);
+
+      // 💰 내 존(zoneIndex)에서 죽은 적일 때만 보상 지급 — 다른 플레이어 처치 보상 가로채기 방지
+      if (dead && dead.zoneIndex === s.zoneIndex) {
+        const goldReward = dead.isBoss ? 10 : 1;
+        s.addGold(goldReward);
+
+        // 목재는 확률 드랍 (일반 15%, 보스 100% + 2개)
+        if (dead.isBoss) {
+          s.addWood(2);
+        } else if (Math.random() < 0.15) {
+          s.addWood(1);
+        }
+      }
+
       useGameStore.setState(cur => ({
         enemies: cur.enemies.filter(e => e.id !== enemyId),
       }));
@@ -175,6 +191,16 @@ export function useGameLoop() {
 
           if (newGauge >= 100) {
             unitUpdates.set(unit.id, { lastFired: now, skillGauge: 0 });
+
+            // ✨ 스킬 임팩트 VFX 발동
+            useGameStore.getState().addSkillEffect({
+              x: unit.x,
+              z: unit.z,
+              zoneIndex: myZoneIndex,
+              color: unit.type.color,
+              radius: unit.type.range / 6,
+            });
+
             for (const e of attackableEnemies) {
               const ep = getPathPosition(e.t, e.zoneIndex ?? 0);
               const sd = Math.sqrt((unit.x - ep.x) ** 2 + (unit.z - ep.z) ** 2);

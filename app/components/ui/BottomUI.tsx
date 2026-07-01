@@ -6,6 +6,7 @@ import { RARITY_LABEL } from '../../game/units/UnitTypes';
 import { useEffect, useRef, useCallback, useState } from 'react';import * as THREE from 'three';
 import { getPathPosition } from '../../game/path/EnemyPath';
 import ChatBox from '../ui/ChatBox';
+import { ShopUpgradePanel } from './ShopUpgradePanel';
 
 const MAP_W = 120;
 const MAP_H = 220;
@@ -332,6 +333,7 @@ export function BottomUI({
     phase, rollCount, specialRollCount, gameOver,
     units, enemies, selectedUnitIds,
     rollUnit, rollSpecial, executeCombination, setPhase, selectUnits,
+    activeShopPanel,
   } = useGameStore();
 
   const [selectedEnemyId, setSelectedEnemyId] = useState<string | null>(null);
@@ -450,7 +452,7 @@ export function BottomUI({
         </div>
       </div>
 
-      {/* ══ 가운데: 초상화 + 유닛 정보 ═══════════════════════ */}
+      {/* ══ 가운데: 초상화 + 유닛 정보 (상점/업그레이드소 열리면 이 넓은 자리를 대신 차지) ═══ */}
       <div style={{
         flex: 1,
         height: '100%',
@@ -460,7 +462,9 @@ export function BottomUI({
         overflow: 'hidden',
         backgroundColor: WC_BG2,
       }}>
-        {selectedUnit && rs ? (
+        {activeShopPanel ? (
+          <ShopUpgradePanel />
+        ) : selectedUnit && rs ? (
           <>
             {/* 초상화 */}
             <div style={{
@@ -616,6 +620,7 @@ export function BottomUI({
         flexDirection: 'column',
         overflow: 'hidden',
       }}>
+        <>
         {/* 상단: 명령 버튼 */}
         <div style={{
           flexShrink: 0,
@@ -701,6 +706,7 @@ export function BottomUI({
             </div>
           )}
         </div>
+        </>
       </div>
 
       {/* ══ 채팅 패널 ═══════════════════════════════════════

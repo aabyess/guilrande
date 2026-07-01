@@ -8,6 +8,9 @@ import { GameMap } from './GameMap';
 import { UnitMesh, GhostUnitMesh } from './UnitMesh';
 import { EnemyMesh } from './EnemyMesh';
 import { StoryZoneObjects } from './StoryZone';
+import { SkillEffects } from './SkillEffects';
+import { ShopBuildings } from './ShopBuildings';
+import { UpgradeBuildings } from './UpgradeBuildings';
 import { useGameLoop } from './GameLoop';
 import { useGameStore, OtherPlayerUnit } from '../../store/useGameStore';
 
@@ -166,6 +169,15 @@ function SceneInner({
       }} />)}
 
       <StoryZoneObjects />
+
+      {/* ✨ 스킬 발동 VFX */}
+      <SkillEffects />
+
+      {/* 🏪 플레이어별 상점 (본인 것만 클릭 가능) */}
+      <ShopBuildings />
+
+      {/* ⬆️ 플레이어별 업그레이드소 (본인 것만 클릭 가능) */}
+      <UpgradeBuildings />
 
       {/* 다른 플레이어 유닛 (고스트 — 조종 불가) */}
       {otherPlayersUnits.flatMap(player =>

@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { UnitType, ROLL_POOL, UNIT_TYPES } from '../game/units/UnitTypes';
+import { UnitType, ROLL_POOL, UNIT_TYPES, Rarity } from '../game/units/UnitTypes';
 import { COMBINATIONS } from '../game/combinations/Combinations';
 
 export interface UnitInstance {
@@ -81,6 +81,18 @@ export interface OtherPlayerData {
   units: OtherPlayerUnit[];
 }
 
+// 스킬 발동 시 잠깐 떴다가 사라지는 시각 이펙트 1건
+export interface SkillEffectInstance {
+  id: string;
+  x: number;
+  z: number;
+  zoneIndex: number;
+  color: number;       // 유닛 색상 그대로 사용
+  radius: number;      // 스킬 적용 반경 (시각적 크기 기준)
+  startTime: number;   // performance.now() 발동 시각
+  particleDirs: { x: number; z: number; y: number }[]; // 렌더링 중 Math.random 금지 → 발동 시점에 미리 계산
+}
+
 interface GameState {
   phase: 'prepare' | 'battle';
   round: number;
@@ -89,6 +101,38 @@ interface GameState {
   rollCount: number;
   specialRollCount: number;
   gameOver: boolean;
+
+  // 💰 재화 — 적 처치 등으로 획득, 도박/뽑기에 소모
+  gold: number;
+  wood: number;
+  addGold: (amount: number) => void;
+  addWood: (amount: number) => void;
+  spendGold: (amount: number) => boolean; // 잔액 부족시 false
+  spendWood: (amount: number) => boolean;
+
+  // 🎲 골드 도박: 10원 베팅 → 0~50원 랜덤 획득
+  gambleGold: () => { spent: number; won: number } | null;
+
+  // 🪵 목재 뽑기: tier 이상 확정 확률로 유닛 획득
+  rollWoodGacha: (tier: 'special' | 'rare' | 'legendary') =>
+    { ok: boolean; unit?: UnitType; reason?: 'insufficient_wood' | 'total_fail' };
+
+  // ⬆️ 업그레이드소: 골드만 써서 보유 유닛 한 등급 상승 (100% 성공)
+  upgradeUnit: (unitId: string) => { success: boolean; cost?: number; reason?: string };
+  getUpgradeCost: (unitId: string) => number | null; // null이면 더 이상 업그레이드 불가(최고 등급)
+
+  // ⬆️⬆️ 일괄 업그레이드: 해당 등급대 유닛 전체를 한 번에 다음 등급으로 (흔함+안흔함은 같이 묶여서 특별함으로)
+  bulkUpgradeTier: (target: 'rare' | 'epic' | 'legendary' | 'transcendent' | 'hidden') =>
+    { success: boolean; count?: number; cost?: number; reason?: string };
+  getBulkUpgradeInfo: (target: 'rare' | 'epic' | 'legendary' | 'transcendent' | 'hidden') =>
+    { count: number; costPerUnit: number; totalCost: number; usesLeft: number };
+
+  // 등급별 일괄 업그레이드 사용 가능 횟수 (각 버튼 독립적으로 10번씩) — 골드만 쓰지만 횟수는 제한
+  upgradeUsesLeft: Record<'rare' | 'epic' | 'legendary' | 'transcendent' | 'hidden', number>;
+
+  // 🏪⬆️ 하단 UI에 띄울 패널 — 3D 건물 클릭 시 여기로 설정, 패널 자체는 일반 HTML로 렌더링
+  activeShopPanel: 'shop' | 'upgrade' | null;
+  setActiveShopPanel: (panel: 'shop' | 'upgrade' | null) => void;
 
   units: UnitInstance[];
   enemies: EnemyInstance[];
@@ -112,6 +156,11 @@ interface GameState {
   // 현재 공격 중인 유닛 ID 목록 (애니메이션 전환용)
   attackingUnitIds: Set<string>;
   setAttackingUnitIds: (ids: Set<string>) => void;
+
+  // 스킬 발동 VFX 큐
+  skillEffects: SkillEffectInstance[];
+  addSkillEffect: (effect: Omit<SkillEffectInstance, 'id' | 'startTime' | 'particleDirs'>) => void;
+  removeSkillEffect: (id: string) => void;
 
   rollUnit: () => void;
   rollSpecial: () => void;
@@ -182,6 +231,41 @@ let eid = 0;
 let uid = 0;
 
 // 플레이어 존 중심 좌표 (zoneIndex 0~3)
+// 등급 사다리 — 인덱스가 클수록 높은 등급
+const RARITY_ORDER: Rarity[] = ['common', 'uncommon', 'rare', 'epic', 'legendary', 'transcendent', 'hidden'];
+
+// 업그레이드소: "현재 등급 → 다음 등급" 1회당 골드 비용 (인덱스 = 현재 등급의 RARITY_ORDER 인덱스)
+// common→uncommon, uncommon→rare, rare→epic, epic→legendary, legendary→transcendent, transcendent→hidden
+const UPGRADE_GOLD_COST = [30, 60, 120, 250, 500, 1000];
+
+// 일괄 업그레이드소: 버튼 1개 = 해당 등급대 유닛 전체를 다음 등급으로. 흔함+안흔함은 합쳐서 "특별함" 버튼 하나로 처리.
+const BULK_UPGRADE_CONFIG: Record<'rare' | 'epic' | 'legendary' | 'transcendent' | 'hidden', {
+  sourceRarities: Rarity[];
+  costPerUnit: number;
+  label: string;
+}> = {
+  rare:         { sourceRarities: ['common', 'uncommon'], costPerUnit: 30,  label: '특별함' },
+  epic:         { sourceRarities: ['rare'],                costPerUnit: 80,  label: '희귀함' },
+  legendary:    { sourceRarities: ['epic'],                costPerUnit: 180, label: '전설' },
+  transcendent: { sourceRarities: ['legendary'],           costPerUnit: 400, label: '초월' },
+  hidden:       { sourceRarities: ['transcendent'],        costPerUnit: 800, label: '불멸' },
+};
+
+// 목재 상점 밑장 3종 설정
+// successRate = "해당 등급 이상이 나올 확률", 실패 시 fallback 등급에서 뽑힘
+// 등급 한글명: 흔함=common, 안흔함=uncommon, 특별함=rare, 희귀함=epic, 전설=legendary, 초월=transcendent, 불멸=hidden
+const WOOD_GACHA_CONFIG: Record<'special' | 'rare' | 'legendary', {
+  targetRarity: Rarity;
+  successRate: number;
+  cost: number;
+  fallback: Rarity;
+  label: string;
+}> = {
+  special:   { targetRarity: 'rare',      successRate: 0.8, cost: 1, fallback: 'uncommon', label: '특별함' },
+  rare:      { targetRarity: 'epic',      successRate: 0.6, cost: 2, fallback: 'rare',      label: '희귀함' },
+  legendary: { targetRarity: 'legendary', successRate: 0.4, cost: 3, fallback: 'epic',      label: '전설' },
+};
+
 const ZONE_CENTERS: [number, number][] = [
   [-30, -30], // P1 좌상단
   [ 30, -30], // P2 우상단
@@ -197,6 +281,10 @@ export const useGameStore = create<GameState>((set, get) => ({
   rollCount: 5,
   specialRollCount: 1,
   gameOver: false,
+  gold: 30,
+  wood: 5,
+  activeShopPanel: null,
+  upgradeUsesLeft: { rare: 10, epic: 10, legendary: 10, transcendent: 10, hidden: 10 },
   units: [],
   enemies: [],
   selectedUnitIds: [],
@@ -209,6 +297,168 @@ export const useGameStore = create<GameState>((set, get) => ({
   zoneIndex: 0,
   attackingUnitIds: new Set<string>(),
   otherPlayersUnits: [],
+  skillEffects: [],
+
+  addGold: (amount) => set(s => ({ gold: s.gold + amount })),
+  addWood: (amount) => set(s => ({ wood: s.wood + amount })),
+  setActiveShopPanel: (panel) => set({ activeShopPanel: panel }),
+  spendGold: (amount) => {
+    const ok = get().gold >= amount;
+    if (ok) set(s => ({ gold: s.gold - amount }));
+    return ok;
+  },
+  spendWood: (amount) => {
+    const ok = get().wood >= amount;
+    if (ok) set(s => ({ wood: s.wood - amount }));
+    return ok;
+  },
+
+  // 10원 베팅 → 0~50원(정수, 양 끝 포함) 랜덤 획득. 10% 확률로 완전 꽝(0원). 베팅액은 무조건 차감됨.
+  gambleGold: () => {
+    const BET = 10;
+    const { gold, spendGold, addGold } = get();
+    if (gold < BET) return null;
+    spendGold(BET);
+    const totalFail = Math.random() < 0.1; // 10% 완전 꽝
+    const won = totalFail ? 0 : Math.floor(Math.random() * 51); // 0~50
+    if (won > 0) addGold(won);
+    return { spent: BET, won };
+  },
+
+  // 목재 소모 → 10% 확률로 완전 꽝(유닛 없음), 90% 확률로 tier 이상 확정 확률 굴림
+  rollWoodGacha: (tier) => {
+    const cfg = WOOD_GACHA_CONFIG[tier];
+    const { wood, spendWood, placeUnit, zoneIndex } = get();
+    if (wood < cfg.cost) return { ok: false, reason: 'insufficient_wood' };
+    if (!spendWood(cfg.cost)) return { ok: false, reason: 'insufficient_wood' };
+
+    // 10% 완전 꽝 — 목재만 소모되고 유닛 없음
+    if (Math.random() < 0.1) {
+      return { ok: false, reason: 'total_fail' };
+    }
+
+    const success = Math.random() < cfg.successRate;
+
+    const pool = success
+      ? UNIT_TYPES.filter(u => u.rarity === cfg.targetRarity)
+      : UNIT_TYPES.filter(u => u.rarity === cfg.fallback);
+
+    if (pool.length === 0) return { ok: false, reason: 'total_fail' };
+    const picked = pool[Math.floor(Math.random() * pool.length)];
+
+    const [zx, zz] = ZONE_CENTERS[zoneIndex] ?? [-30, -30];
+    placeUnit(picked, zx, zz);
+    return { ok: true, unit: picked };
+  },
+
+  getUpgradeCost: (unitId) => {
+    const unit = get().units.find(u => u.id === unitId);
+    if (!unit) return null;
+    const curIdx = RARITY_ORDER.indexOf(unit.type.rarity);
+    if (curIdx < 0 || curIdx >= UPGRADE_GOLD_COST.length) return null; // 이미 최고 등급(hidden)
+    return UPGRADE_GOLD_COST[curIdx];
+  },
+
+  upgradeUnit: (unitId) => {
+    const { units, gold, spendGold } = get();
+    const unit = units.find(u => u.id === unitId);
+    if (!unit) return { success: false, reason: '유닛을 찾을 수 없습니다' };
+
+    const curIdx = RARITY_ORDER.indexOf(unit.type.rarity);
+    if (curIdx < 0 || curIdx >= UPGRADE_GOLD_COST.length) {
+      return { success: false, reason: '이미 최고 등급입니다' };
+    }
+
+    const cost = UPGRADE_GOLD_COST[curIdx];
+    if (gold < cost) return { success: false, cost, reason: '골드가 부족합니다' };
+
+    const nextRarity = RARITY_ORDER[curIdx + 1];
+    const pool = UNIT_TYPES.filter(u => u.rarity === nextRarity);
+    if (pool.length === 0) return { success: false, cost, reason: '다음 등급 유닛이 없습니다' };
+
+    spendGold(cost);
+    const nextType = pool[Math.floor(Math.random() * pool.length)];
+
+    set(s => ({
+      units: s.units.map(u =>
+        u.id === unitId
+          ? { ...u, type: nextType, maxHp: nextType.hp, hp: nextType.hp, skillGauge: 0 }
+          : u
+      ),
+    }));
+
+    return { success: true, cost };
+  },
+
+  getBulkUpgradeInfo: (target) => {
+    const cfg = BULK_UPGRADE_CONFIG[target];
+    const count = get().units.filter(u => cfg.sourceRarities.includes(u.type.rarity)).length;
+    return {
+      count,
+      costPerUnit: cfg.costPerUnit,
+      totalCost: count * cfg.costPerUnit,
+      usesLeft: get().upgradeUsesLeft[target],
+    };
+  },
+
+  bulkUpgradeTier: (target) => {
+    const cfg = BULK_UPGRADE_CONFIG[target];
+    const { units, gold, spendGold, upgradeUsesLeft } = get();
+
+    if (upgradeUsesLeft[target] <= 0) {
+      return { success: false, reason: `${cfg.label} 업그레이드는 이미 10번 다 사용했습니다` };
+    }
+
+    const eligible = units.filter(u => cfg.sourceRarities.includes(u.type.rarity));
+
+    if (eligible.length === 0) {
+      return { success: false, reason: `업그레이드할 ${cfg.label} 미만 등급 유닛이 없습니다` };
+    }
+
+    const totalCost = eligible.length * cfg.costPerUnit;
+    if (gold < totalCost) {
+      return { success: false, count: eligible.length, cost: totalCost, reason: '골드가 부족합니다' };
+    }
+
+    const pool = UNIT_TYPES.filter(u => u.rarity === target);
+    if (pool.length === 0) {
+      return { success: false, cost: totalCost, reason: '대상 등급 유닛이 없습니다' };
+    }
+
+    spendGold(totalCost);
+    const eligibleIds = new Set(eligible.map(u => u.id));
+
+    set(s => ({
+      units: s.units.map(u => {
+        if (!eligibleIds.has(u.id)) return u;
+        const nextType = pool[Math.floor(Math.random() * pool.length)];
+        return { ...u, type: nextType, maxHp: nextType.hp, hp: nextType.hp, skillGauge: 0 };
+      }),
+      upgradeUsesLeft: { ...s.upgradeUsesLeft, [target]: s.upgradeUsesLeft[target] - 1 },
+    }));
+
+    return { success: true, count: eligible.length, cost: totalCost };
+  },
+
+  addSkillEffect: (effect) => {
+    const id = `fx${uid++}`;
+    const maxRadius = Math.max(1, effect.radius);
+    const particleDirs = Array.from({ length: 10 }, () => {
+      const angle = Math.random() * Math.PI * 2;
+      const dist = maxRadius * (0.5 + Math.random() * 0.6);
+      return {
+        x: Math.cos(angle) * dist,
+        z: Math.sin(angle) * dist,
+        y: 0.3 + Math.random() * 1.2,
+      };
+    });
+    set(s => ({
+      skillEffects: [...s.skillEffects, { ...effect, id, startTime: performance.now(), particleDirs }],
+    }));
+  },
+  removeSkillEffect: (id) => {
+    set(s => ({ skillEffects: s.skillEffects.filter(e => e.id !== id) }));
+  },
 
   setCameraVision: (level: VisionLevel) => {
     set({ visionLevel: level, targetCameraY: VISION_PRESETS[level] });
